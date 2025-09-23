@@ -11,23 +11,23 @@ Make policy generation and checking quick, so it doesn’t slow down development
 Automatically update the OPA policies to stay compliant when the cloud rules change.
 
 **Users/Personas of the Project:** ANGEL 
-Developers
+-Developers
 As a dev, I want to run pre-generated OPA policies locally so that I can validate my IaC code without connecting to the cloud, so that I can get faster feedback 
 As a dev, I want to receive clear feedback from OPA validations integrated into my IaC pipeline so I can fix issues before deployment
-Pipeline Administrators
+-Pipeline Administrators
 As a pipeline admin, I want the system to automatically public synthesized OPA policies into the IaC pipeline so that compliance checks happen automatically without manual intervention
 As a pipeline admin, I want the pipeline to synchronize OPA policies whenever cloud guardrails change, so pipeline policies never become stale.
-Compliance Team/Security 
+-Compliance Team/Security 
 As the compliance team, I want to verify that the synthesized OPA policies accurately reflect the current cloud guardrails, to ensure that security policies are enforced consistently across environments.
 As the compliance team, I want notifications when synchronization between cloud guardrails and OPA policies fails or detects discrepancies.
 
-**Scope and Features of the Project: ** Minghong
-In Scope:
+**Scope and Features of the Project:** Minghong
+-In Scope:
 AWS Guardrail Discovery. Retrieve governance rules from an AWS account (e.g., Service Control Policies, IAM Policies, Config Rules).
 Policy Translation. Automatically translate these cloud rules into equivalent OPA/Rego policies.
 Pipeline Integration. Integrate the generated OPA policies into Infrastructure-as-Code pipelines for early compliance checks.
 Basic Synchronization. Regenerate and update OPA policies when cloud rules change.
-Out Scope:
+-Out Scope:
 Visualization UI. No dashboards or graphical visualization of policies.
 Production Enforcement. Project will focus on generating and validating policies, not on enforcing them in production environments
 Advanced Drift Detection .Only simple synchronization updates will be considered; complex cloud–OPA drift detection and repair will not be implemented.
@@ -47,22 +47,22 @@ Github pipeline check
 
 
 **Release Planning:** Lingfei 
-###Phase 1 - Foundations
+-Phase 1 - Foundations
 Define scope, goals, and descriptions of the project. 
 Set up a development environment. 
 Deliverable: Architecture and design document, ready-to-build setup. 
 
-###Phase 2 - Core Development 
+-Phase 2 - Core Development 
 Build policy discovery for AWS (SCPs, IAM, Config Rules). 
 Generate OPA/Rego policies and integrate with Terraform checks. 
 Deliverable: Working prototype with local testing support. 
 
-###Phase 3 - Synchronization and Performance
+-Phase 3 - Synchronization and Performance
 Add synchronization between cloud guardrails and generated OPA. 
 Improve performance, error handling, and reporting. 
 Deliverable: Stable engine that updates and validates policies reliably. 
 
-###Phase 4 - Release
+-Phase 4 - Release
 Package final tool and upload to Github. 
 Run demo and present. 
 Deliverable: Policy Synthesizer with docs and training. 
