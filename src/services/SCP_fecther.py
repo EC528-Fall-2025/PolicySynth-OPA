@@ -1,10 +1,22 @@
-import boto3
+import boto3 
 from botocore.exceptions import ClientError, NoCredentialsError
 import json
+import Keywords
+
+SCP_policies = [
+    Keywords.AISERVICES_OPT_OUT_POLICY,
+    Keywords.BACKUP_POLICY,
+    Keywords.CHATBOT_POLICY,
+    Keywords.DECLARATIVE_POLICY_EC2,
+    Keywords.RESOURCE_CONTROL_POLICY,
+    Keywords.SECURITYHUB_POLICY,
+    Keywords.SERVICE_CONTROL_POLICY,
+    Keywords.TAG_POLICY
+]
 
 
 class SCPFetcher:
-    def __init__(self, config):
+    def __init__(self, config, organizations_client=None):
         self.config = config or {}
 
         # initialize given config
@@ -35,4 +47,19 @@ class SCPFetcher:
 
     def fetch_scp(self, source, destination):
         # Implement SCP fetching logic here
-        pass
+        try:
+            scps = []
+            paginator = self.organizations_client.get_paginator('list_policies')
+
+            # FIXME: there has to be a better way of doing this
+            for policy in SCP_policies:
+                for page in paginator.paginate(Filter=policy):
+                    for retrieved_policy in page['Policies']:
+                        policy_details = self.organizations_client.describe_policy(
+                            PolicyId=retrieved_policy['Id']
+                        )
+                        scps.append(policy_details['Policy'])
+            return scps
+        except ClientError as e:
+            # maybe add some better logging here
+            raise Exception(f"Error fetching SCPs: {e}")
