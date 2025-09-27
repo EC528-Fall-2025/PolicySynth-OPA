@@ -1,7 +1,6 @@
-import boto3 
+import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-import json
-import Keywords
+from src.Keywords import Keywords
 
 SCP_policies = [
     Keywords.AISERVICES_OPT_OUT_POLICY,
@@ -16,8 +15,8 @@ SCP_policies = [
 
 
 class SCPFetcher:
-    def __init__(self, config, organizations_client=None):
-        self.config = config or {}
+    def __init__(self, config={}, organizations_client=None):
+        self.config = config
 
         # initialize given config
         try:
@@ -63,3 +62,5 @@ class SCPFetcher:
         except ClientError as e:
             # maybe add some better logging here
             raise Exception(f"Error fetching SCPs: {e}")
+
+test = SCPFetcher()
