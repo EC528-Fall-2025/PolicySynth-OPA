@@ -49,6 +49,7 @@ class SCPFetcher:
                             "via AWS CLI, environment variables, or pass "
                             "them in config.")
 
+    # NOTE: will we have to make these async at any point?
     def fetch_scp(self):
         try:
             scps = []
