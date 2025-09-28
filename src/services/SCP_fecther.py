@@ -1,6 +1,7 @@
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 from src.Keywords import Keywords
+from src.models.SCP import SCP
 
 
 class SCPFetcher:
@@ -49,6 +50,8 @@ class SCPFetcher:
                     policy_details = self.organizations_client.describe_policy(
                         PolicyId=retrieved_policy['Id']
                     )
+                    # NOTE: do something with data handling here
+                    scp_policy = SCP.from_aws_response(policy_details)
                     scps.append(policy_details['Policy'])
             return scps
         except ClientError as e:
