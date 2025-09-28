@@ -8,6 +8,15 @@ class SCPFetcher:
     def __init__(self, config=None, organizations_client=None):
         self.config = config or {}
 
+        # config might look something like this as input arg
+
+        # config = {
+        #     'aws_access_key_id': 'your-access-key',
+        #     'aws_secret_access_key': 'your-secret-key',
+        #     'region': 'us-east-1'
+        # }
+
+        # TODO: make a session factory
         if organizations_client:
             self.organizations_client = organizations_client
             return
@@ -51,8 +60,10 @@ class SCPFetcher:
                         PolicyId=retrieved_policy['Id']
                     )
                     # NOTE: do something with data handling here
-                    scp_policy = SCP.from_aws_response(policy_details)
-                    scps.append(policy_details['Policy'])
+                    scp_policy: SCP = SCP.from_aws_response(policy_details)
+                    scps.append(scp_policy)
+            # NOTE: opa only handles json/yaml, so we can serialize
+            # this when translating
             return scps
         except ClientError as e:
             # maybe add some better logging here
