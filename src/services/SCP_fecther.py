@@ -55,7 +55,8 @@ class SCPFetcher:
             scps = []
             paginator = self.organizations_client.get_paginator('list_policies')
 
-            for page in paginator.paginate(Filter=Keywords.SERVICE_CONTROL_POLICY.value):
+            service_control_policy = Keywords.SERVICE_CONTROL_POLICY.value
+            for page in paginator.paginate(Filter=service_control_policy):
                 for retrieved_policy in page['Policies']:
                     policy_details = self.organizations_client.describe_policy(
                         PolicyId=retrieved_policy['Id']

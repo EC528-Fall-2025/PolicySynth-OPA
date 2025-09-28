@@ -4,7 +4,6 @@ from src.services.SCP_fecther import SCPFetcher
 from src.models.SCP import SCP
 
 
-
 class TestSCPFetcher(unittest.TestCase):
 
     def test_fetch_scp_returns_list(self):
