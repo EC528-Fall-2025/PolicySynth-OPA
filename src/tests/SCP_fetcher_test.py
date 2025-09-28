@@ -1,9 +1,8 @@
 import unittest
 from unittest.mock import Mock
-from botocore.exceptions import ClientError
 from src.services.SCP_fecther import SCPFetcher
 from src.models.SCP import SCP
-# 
+
 
 
 class TestSCPFetcher(unittest.TestCase):
