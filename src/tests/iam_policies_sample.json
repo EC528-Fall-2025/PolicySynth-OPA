@@ -1,0 +1,24 @@
+{
+  "AttachedPolicies": [
+    {
+      "PolicyName": "AWSConfigUserAccess",
+      "PolicyArn": "arn:aws:iam::aws:policy/AWSConfigUserAccess"
+    },
+    {
+      "PolicyName": "IAMReadOnlyAccess",
+      "PolicyArn": "arn:aws:iam::aws:policy/IAMReadOnlyAccess"
+    }
+  ],
+  "IsTruncated": false,
+  "ResponseMetadata": {
+    "RequestId": "2cf48ba4-86e7-4af5-b0a4-35618e316910",
+    "HTTPStatusCode": 200,
+    "HTTPHeaders": {
+      "date": "Tue, 30 Sep 2025 22:43:47 GMT",
+      "x-amzn-requestid": "2cf48ba4-86e7-4af5-b0a4-35618e316910",
+      "content-type": "text/xml",
+      "content-length": "697"
+    },
+    "RetryAttempts": 0
+  }
+}
