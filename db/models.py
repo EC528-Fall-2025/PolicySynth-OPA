@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, String, Text, Enum, Integer, ForeignKey, DateTime, JSON
+    Column, String, Text, Enum, Integer, ForeignKey, DateTime, JSON, Boolean
 )
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
@@ -57,3 +57,19 @@ class SyncEvent(Base):
     status = Column(Enum("success", "failure", "warning", name="sync_status_enum"), nullable=False)
     details = Column(Text)
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+class SCPModel(Base):
+    __tablename__ = "scp_policies"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    policy_id = Column(String, nullable=False, unique=True)
+    arn = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    policy_type = Column(String, nullable=False, default="")
+    aws_managed = Column(Boolean, default=False, nullable=False)
+    content = Column(Text, nullable=False)
+    policy_summary = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
