@@ -1,4 +1,7 @@
 # EC528-Fall-2025-template-repo
+** Sprint Demos ** 
+======================================
+Demo1 : https://drive.google.com/file/d/13vXFEJPiSFUn6UjQapNafNg7wZJIoSYG/view?usp=sharing
 
 **Vision and Goals of the Project:**
 ======================================
