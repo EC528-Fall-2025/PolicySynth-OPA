@@ -1,7 +1,7 @@
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
-## syntax of request for IAM policies 
+# syntax of request for IAM policies
 """ response = client.list_policies(
     Scope='All'|'AWS'|'Local',
     OnlyAttached=True|False,
@@ -10,18 +10,20 @@ from botocore.exceptions import ClientError, NoCredentialsError
     Marker='string',
     MaxItems=123
 ) """
- 
-class IAMFetcher: 
+
+
+class IAMFetcher:
     # sets up session and iam client
-    def __init__(self, config=None, iam_client=None): 
+    # user needs to have iam:ListPolicies action
+    def __init__(self, config=None, iam_client=None):
         self.config = config or {}
 
-        if iam_client:  # set iam client 
+        if iam_client:  # set iam client
             self.iam_client = iam_client
             return
-        try : 
-            if self.config.get('profile'): 
-                session=boto3.Session(
+        try:
+            if self.config.get('profile'):
+                session = boto3.Session(
                     profile_name=self.config['profile'],
                     region_name=self.config.get('region', 'us-east-1')
                 )
@@ -42,14 +44,25 @@ class IAMFetcher:
         except NoCredentialsError: 
             raise Exception("AWS Credentials not configured.")
 
-    ## fetch_iam_policies fetches the existing IAM policies, can filter based on scope, etc. 
+    # fetch_iam_policies fetches the existing IAM policies, can filter based on scope, etc.
     def fetch_iam_policies(self, scope="All", only_Attached=False):
-        try: 
-            policies =[] # where were storing policies 
-            paginator = self.iam_client.get_paginator('list_policies') # this is where list policies is called
-            for page in paginator.paginate(Scope=scope, OnlyAttached=only_Attached): # allows us to loop through all pages
-                for policy in page.get('Policies', []): 
-                    policies.append(policy) # have to connect to database 
+        try:
+            policies = []  # where were storing policies
+
+            # this is where list policies is called
+            paginator = self.iam_client.get_paginator('list_policies')
+            for page in paginator.paginate(Scope=scope, OnlyAttached=only_Attached):
+                for policy in page.get('Policies', []):
+                    # NOTE: have to connect to database
+                    policies.append(policy)
             return policies
-        except ClientError as e: 
+        except ClientError as e:
             raise Exception(f"Error retrieving policies: {e}")
+
+import json
+test = IAMFetcher()
+policy = test.fetch_iam_policies()
+with open('iam_policies.json', 'w') as f:
+    json.dump(policy, f, indent=2, default=str)
+
+print("policy saves to json")
