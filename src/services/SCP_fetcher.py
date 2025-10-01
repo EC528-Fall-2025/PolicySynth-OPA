@@ -62,8 +62,10 @@ class SCPFetcher:
                         PolicyId=retrieved_policy['Id']
                     )
                     # NOTE: do something with data handling here
-                    scp_policy: SCP = SCP.from_aws_response(policy_details)
+                    # not using handler, should we use it or just go like this?
+                    scp_policy: SCP = policy_details['Policy']
                     scps.append(scp_policy)
+
             # NOTE: opa only handles json/yaml, so we can serialize
             # this when translating
             return scps

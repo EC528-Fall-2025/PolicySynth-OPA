@@ -1,5 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
+from src.models.IAM import IAMPolicy
 
 # syntax of request for IAM policies
 """ response = client.list_policies(
@@ -41,11 +42,14 @@ class IAMFetcher:
             if session.get_credentials() is None:
                 raise NoCredentialsError
             self.iam_client = session.client('iam')
-        except NoCredentialsError: 
+        except NoCredentialsError:
             raise Exception("AWS Credentials not configured.")
 
-    # fetch_iam_policies fetches the existing IAM policies, can filter based on scope, etc.
-    def fetch_iam_policies(self, scope="All", only_Attached=False):
+    # fetch_iam_policies fetches the existing IAM policies, can filter based 
+    # on scope, etc.
+    def fetch_iam_policies(self, scope="Local", only_Attached=False):
+        # scope is defaulted to local since we only want to get customer
+        # policies and NOT AWS managed policies
         try:
             policies = []  # where were storing policies
 
@@ -53,8 +57,13 @@ class IAMFetcher:
             paginator = self.iam_client.get_paginator('list_policies')
             for page in paginator.paginate(Scope=scope, OnlyAttached=only_Attached):
                 for policy in page.get('Policies', []):
-                    # NOTE: have to connect to database
-                    policies.append(policy)
+                    policy_information = self.iam_client.get_policy_version(
+                        PolicyArn=policy['Arn'],
+                        VersionId=policy['DefaultVersionId']
+                    )
+                    # TODO: save to db
+                    iam_policy: IAMPolicy = policy_information['PolicyVersion']
+                    policies.append(iam_policy)
             return policies
         except ClientError as e:
             raise Exception(f"Error retrieving policies: {e}")
