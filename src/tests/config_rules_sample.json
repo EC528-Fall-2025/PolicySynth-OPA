@@ -1,0 +1,32 @@
+{
+  "ConfigRules": [
+    {
+      "ConfigRuleName": "s3-bucket-public-read-prohibited",
+      "ConfigRuleArn": "arn:aws:config:us-east-1:416700587965:config-rule/config-rule-k8hsdv",
+      "ConfigRuleId": "config-rule-k8hsdv",
+      "Description": "Checks that your Amazon S3 buckets do not allow public read access. The rule checks the Block Public Access settings, the bucket policy, and the bucket access control list (ACL).",
+      "Source": {
+        "Owner": "AWS",
+        "SourceIdentifier": "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+      },
+      "ConfigRuleState": "ACTIVE",
+      "EvaluationModes": [
+        {
+          "Mode": "DETECTIVE"
+        }
+      ]
+    }
+  ],
+  "ResponseMetadata": {
+    "RequestId": "4f31d3e8-4a31-4f20-8815-ff31077f9b21",
+    "HTTPStatusCode": 200,
+    "HTTPHeaders": {
+      "x-amzn-requestid": "4f31d3e8-4a31-4f20-8815-ff31077f9b21",
+      "strict-transport-security": "max-age=86400",
+      "content-type": "application/x-amz-json-1.1",
+      "content-length": "536",
+      "date": "Tue, 30 Sep 2025 22:43:47 GMT"
+    },
+    "RetryAttempts": 0
+  }
+}
