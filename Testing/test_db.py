@@ -8,7 +8,7 @@ Session = init_db("sqlite:///:memory:")
 
 # Create a session
 with Session() as session:
-    # 2️⃣ Insert test SCP policy
+    #Insert test SCP policy
     scp = SCP(
         policy_id="p-123",
         arn="arn:aws:org:policy/p-123",
@@ -21,7 +21,7 @@ with Session() as session:
     )
     session.add(scp)
 
-    # 3️⃣ Insert test IAM policy
+    #Insert test IAM policy
     iam = IAM(
         policy_id="AID-456",
         arn="arn:aws:iam::123456789012:policy/TestPolicy",
@@ -33,7 +33,7 @@ with Session() as session:
     )
     session.add(iam)
 
-    # 4️⃣ Insert test ConfigRule
+    #Insert test ConfigRule
     config = ConfigRule(
         rule_name="TestConfigRule",
         rule_arn="arn:aws:config:rule/TestConfigRule",
@@ -47,7 +47,7 @@ with Session() as session:
 
     session.commit()
 
-    # 5️⃣ Query back to verify
+    #Query back to verify
     scps = session.query(SCP).all()
     iams = session.query(IAM).all()
     configs = session.query(ConfigRule).all()
