@@ -1,7 +1,7 @@
 from sqlalchemy import (
     Column, String, Text, Enum, Integer, ForeignKey, DateTime, JSON, Boolean
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -43,7 +43,7 @@ class PolicyPack(Base):
     __tablename__ = "policy_packs"
     id = Column(String, primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
-    opa_policy_ids = Column(JSON(String))
+    opa_policy_ids = Column(JSON(String))  # if your DB supports ARRAY
     pipeline_target = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
