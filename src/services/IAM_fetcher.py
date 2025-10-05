@@ -67,11 +67,3 @@ class IAMFetcher:
             return policies
         except ClientError as e:
             raise Exception(f"Error retrieving policies: {e}")
-
-import json
-test = IAMFetcher()
-policy = test.fetch_iam_policies()
-with open('iam_policies.json', 'w') as f:
-    json.dump(policy, f, indent=2, default=str)
-
-print("policy saves to json")
