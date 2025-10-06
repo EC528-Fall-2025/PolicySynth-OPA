@@ -75,6 +75,8 @@ def main():
         'fetch-iam',
         help='Fetch IAM policies for a given AWS account'
     )
+    # NOTE: AWS is EXTREMELY slow since it creates a
+    # ~ 150,000+ line json
     iam_parser.add_argument(
         '--scope',
         choices=['All', 'AWS', 'Local'],
