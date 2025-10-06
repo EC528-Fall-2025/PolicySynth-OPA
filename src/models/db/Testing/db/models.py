@@ -16,7 +16,7 @@ def gen_uuid():
 class CloudGuardrail(Base):
     __tablename__ = "cloud_guardrails"
     id = Column(String, primary_key=True, default=gen_uuid)
-    cloud_provider = Column(Enum("AWS", "Azure", "GCP", name="cloud_provider_enum"), nullable=False)
+    cloud_provider = Column(Enum("AWS", name="cloud_provider_enum"), nullable=False)
     type = Column(Enum("SCP", "IAM", "ConfigRule", "OrgPolicy", name="guardrail_type_enum"), nullable=False)
     name = Column(Text, nullable=False)
     raw_document = Column(JSON, nullable=False)
