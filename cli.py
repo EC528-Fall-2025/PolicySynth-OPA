@@ -14,12 +14,12 @@ def _save_to_json(data: dict, filename: str) -> bool:
             json.dump(data, f, indent=2, default=str)
         return True
     except Exception as e:
-        print(f"An error occured in save_to_json: {e}")
+        print(f"An error occured saving policy as json: {e}")
         return False
 
 
 # NOTE: should we create a model for args
-def fetch_iam_policies(args) -> bool:
+def fetch_iam_policies(args):
     """
     fetch iam policies and save to json
     """
@@ -31,12 +31,27 @@ def fetch_iam_policies(args) -> bool:
         )
 
         output_file = args.output or 'iam_policies.json'
-        print(f"Successfuly fetched {len(policies)} policies")
+        print(f"Successfuly fetched {len(policies)} IAM policies")
         # NOTE: sad path, user doesn't put .json extension
         _save_to_json(policies, output_file)
-        return 1
     except Exception as e:
-        print(f"An error occurred in fetch_iam_policies: {e}")
+        print(f"An error occurred fetching policies: {e}")
+        sys.exit(1)
+
+
+def fetch_scp_policies(args):
+    """
+    fetch scp policies and save to json
+    """
+    try:
+        fetcher = SCPFetcher()
+        policies = fetcher.fetch_scp()
+
+        output_file = args.output or 'service_control_policies.json'
+        print(f"Successfuly fetched {len(policies)} SCP policies")
+        _save_to_json(policies, output_file)
+    except Exception as e:
+        print(f"An error ocurred fetching policies: {e}")
         sys.exit(1)
 
 
@@ -76,8 +91,19 @@ def main():
         '-o',
         help='Output file name (default: iam_policies.json)'
     )
-    iam_parser.set_defaults(func=fetch_iam_policies)
 
+    scp_parser = subparsers.add_parser(
+        'fetch-scp',
+        help='Fetch SCP policies for a given AWS account'
+    )
+    scp_parser.add_argument(
+        '--output',
+        '-o',
+        help='Output file name (default: service_control_policies.json)'
+    )
+
+    iam_parser.set_defaults(func=fetch_iam_policies)
+    scp_parser.set_defaults(func=fetch_scp_policies)
     args = parser.parse_args()
 
     if args.command is None:
