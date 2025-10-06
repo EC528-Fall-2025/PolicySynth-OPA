@@ -7,13 +7,14 @@ import sys
 
 # run pip install -e .
 # then do your thing
-def save_to_json(data: dict, filename: str) -> bool:
+def _save_to_json(data: dict, filename: str) -> bool:
     try:
         with open(filename, 'w') as f:
-            json.dump(data, f, indent=2)
+            # str default for datetime
+            json.dump(data, f, indent=2, default=str)
         return True
     except Exception as e:
-        print(f"An error occured: {e}")
+        print(f"An error occured in save_to_json: {e}")
         return False
 
 
@@ -26,21 +27,26 @@ def fetch_iam_policies(args) -> bool:
         fetcher = IAMFetcher()
         policies = fetcher.fetch_iam_policies(
             scope=args.scope,
-            only_Attached=args.only_Attached
+            only_Attached=args.only_attached
         )
 
-        output_file = args.filename or 'iam_policies.json'
-        save_to_json(policies, output_file)
+        output_file = args.output or 'iam_policies.json'
+        print(f"Successfuly fetched {len(policies)} policies")
+        # NOTE: sad path, user doesn't put .json extension
+        _save_to_json(policies, output_file)
         return 1
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred in fetch_iam_policies: {e}")
         sys.exit(1)
 
 
 def main():
     parser = argparse.ArgumentParser(
         prog='policysynth',
-        description='Policy synthesizer for aws'
+        description='Policy Synthesizer for AWS SCP, IAM Polcies, '
+        '          and AWS Configs. Future functionality will include'
+        '          ability to synthesize OPA policies based off retrieved'
+        '          information'
     )
 
     # since we're having different functions, use subparsers for each one
@@ -49,6 +55,7 @@ def main():
         help='Available commands'
     )
 
+    # TODO: Come up with a way to input configs
     iam_parser = subparsers.add_parser(
         'fetch-iam',
         help='Fetch IAM policies for a given AWS account'
@@ -79,6 +86,7 @@ def main():
 
     # execute the passed function
     args.func(args)
+
 
 if __name__ == '__main__':
     main()
