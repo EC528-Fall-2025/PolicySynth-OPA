@@ -1,12 +1,12 @@
-from services.IAM_fetcher import IAMFetcher
-from services.SCP_fetcher import SCPFetcher
+from src.services.IAM_fetcher import IAMFetcher
+from src.services.SCP_fetcher import SCPFetcher
 import json
 import argparse
 import sys
 
-# run pip install -e . 
-# then do your thing
 
+# run pip install -e .
+# then do your thing
 def save_to_json(data: dict, filename: str) -> bool:
     try:
         with open(filename, 'w') as f:

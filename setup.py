@@ -4,13 +4,14 @@ setup(
     name="policysynth",
     version="0.1.0",
     packages=find_packages(),
+    py_modules=["cli"],
     install_requires=[
         "boto3",
         "botocore",
     ],
     entry_points={
         'console_scripts': [
-            'policysynth=src.cli:main',
+            'policysynth=cli:main',
         ],
     },
     author="ecaa",
