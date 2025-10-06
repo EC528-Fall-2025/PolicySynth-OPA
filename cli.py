@@ -1,5 +1,6 @@
 from src.services.IAM_fetcher import IAMFetcher
 from src.services.SCP_fetcher import SCPFetcher
+from src.Keywords import Keywords
 import json
 import argparse
 import sys
@@ -26,8 +27,7 @@ def fetch_iam_policies(args):
     try:
         fetcher = IAMFetcher()
         policies = fetcher.fetch_iam_policies(
-            scope=args.scope,
-            only_Attached=args.only_attached
+            scope=args.scope
         )
 
         output_file = args.output or 'iam_policies.json'
@@ -84,11 +84,6 @@ def main():
         help='Policy scope (default: Local)'
     )
     iam_parser.add_argument(
-        '--only-attached',
-        action='store_true',
-        help='Only fetch attached policies'
-    )
-    iam_parser.add_argument(
         '--output',
         '-o',
         help='Output file name (default: iam_policies.json)'
@@ -97,6 +92,12 @@ def main():
     scp_parser = subparsers.add_parser(
         'fetch-scp',
         help='Fetch SCP policies for a given AWS account'
+    )
+    scp_parser.add_argument(
+        '--filter',
+        choices=[keyword.value for keyword in Keywords],
+        default=Keywords.SERVICE_CONTROL_POLICY,  # this might be redundant
+        help="Filter what SCPs you wish to retrieve"
     )
     scp_parser.add_argument(
         '--output',
