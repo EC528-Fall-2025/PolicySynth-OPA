@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock
-from src.services.SCP_fecther import SCPFetcher
+from src.services.SCP_fetcher import SCPFetcher
 from src.models.SCP import SCP
 
 
