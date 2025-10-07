@@ -47,7 +47,7 @@ class IAMFetcher:
 
     # fetch_iam_policies fetches the existing IAM policies, can filter based 
     # on scope, etc.
-    def fetch_iam_policies(self, scope="Local", only_Attached=False):
+    def fetch_iam_policies(self, scope="Local"):
         # scope is defaulted to local since we only want to get customer
         # policies and NOT AWS managed policies
         try:
@@ -55,7 +55,7 @@ class IAMFetcher:
 
             # this is where list policies is called
             paginator = self.iam_client.get_paginator('list_policies')
-            for page in paginator.paginate(Scope=scope, OnlyAttached=only_Attached):
+            for page in paginator.paginate(Scope=scope):
                 for policy in page.get('Policies', []):
                     policy_information = self.iam_client.get_policy_version(
                         PolicyArn=policy['Arn'],
