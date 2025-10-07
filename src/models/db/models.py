@@ -12,7 +12,7 @@ Base = declarative_base()
 
 def gen_uuid():
     return str(uuid.uuid4())
-#2 more classes i have general need different policies fetch all iam scp and config test it too
+
 class CloudGuardrail(Base):
     __tablename__ = "cloud_guardrails"
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -74,6 +74,7 @@ class SCP(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+'''
 class IAM(Base):
     __tablename__ = "iam_policies"
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -103,3 +104,4 @@ class ConfigRule(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+'''

@@ -3,11 +3,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timezone
 
-from db.models import (
+from src.models.db.models import (
     Base,
     SCP,
-    IAM,
-    ConfigRule,
+    #IAM,
+    #ConfigRule,
     CloudGuardrail,
     OpaPolicy,
     SyncEvent
@@ -48,6 +48,7 @@ def test_scp_insert_and_query(db_session):
 
 
 # --- IAM ---
+'''
 def test_iam_insert_and_query(db_session):
     iam = IAM(
         policy_id="AID-456",
@@ -86,7 +87,7 @@ def test_configrule_insert_and_query(db_session):
     assert result.rule_name == "TestConfigRule"
     assert result.scope["ComplianceResourceTypes"] == ["AWS::S3::Bucket"]
 
-
+'''
 # --- CloudGuardrail + OpaPolicy + SyncEvent (Relationship Test) ---
 def test_guardrail_policy_sync_relationships(db_session):
     # Create a CloudGuardrail
@@ -147,6 +148,6 @@ def test_guardrail_policy_sync_relationships(db_session):
 # --- Combined smoke test (optional aggregate check) ---
 def test_all_models_exist_and_queryable(db_session):
     """Ensures all tables exist and basic query returns empty list."""
-    for model in [SCP, IAM, ConfigRule, CloudGuardrail, OpaPolicy, SyncEvent]:
+    for model in [SCP, CloudGuardrail, OpaPolicy, SyncEvent]:
         results = db_session.query(model).all()
         assert isinstance(results, list)

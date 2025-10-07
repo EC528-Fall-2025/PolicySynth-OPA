@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from .models import Base
+from .models.db.models import Base
 
 def get_engine(db_url: str):
     return create_engine(db_url, echo=False, future=True)
