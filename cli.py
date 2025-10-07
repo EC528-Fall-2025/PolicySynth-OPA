@@ -1,4 +1,3 @@
-from src.services.IAM_fetcher import IAMFetcher
 from src.services.SCP_fetcher import SCPFetcher
 from src.Keywords import Keywords
 import json
@@ -19,26 +18,7 @@ def _save_to_json(data: dict, filename: str) -> bool:
         return False
 
 
-# NOTE: should we create a model for args
-def fetch_iam_policies(args):
-    """
-    fetch iam policies and save to json
-    """
-    try:
-        fetcher = IAMFetcher()
-        policies = fetcher.fetch_iam_policies(
-            scope=args.scope
-        )
-
-        output_file = args.output or 'iam_policies.json'
-        print(f"Successfuly fetched {len(policies)} IAM policies")
-        # NOTE: sad path, user doesn't put .json extension
-        _save_to_json(policies, output_file)
-    except Exception as e:
-        print(f"An error occurred fetching policies: {e}")
-        sys.exit(1)
-
-
+# NOTE: should we create a model for args?
 def fetch_scp_policies(args):
     """
     fetch scp policies and save to json
@@ -70,25 +50,7 @@ def main():
         help='Available commands'
     )
 
-    # TODO: Come up with a way to input configs
-    iam_parser = subparsers.add_parser(
-        'fetch-iam',
-        help='Fetch IAM policies for a given AWS account'
-    )
-    # NOTE: AWS is EXTREMELY slow since it creates a
-    # ~ 150,000+ line json
-    iam_parser.add_argument(
-        '--scope',
-        choices=['All', 'AWS', 'Local'],
-        default='Local',
-        help='Policy scope (default: Local)'
-    )
-    iam_parser.add_argument(
-        '--output',
-        '-o',
-        help='Output file name (default: iam_policies.json)'
-    )
-
+    # TODO: Come up with a way to input configs?
     scp_parser = subparsers.add_parser(
         'fetch-scp',
         help='Fetch SCP policies for a given AWS account'
@@ -105,7 +67,6 @@ def main():
         help='Output file name (default: service_control_policies.json)'
     )
 
-    iam_parser.set_defaults(func=fetch_iam_policies)
     scp_parser.set_defaults(func=fetch_scp_policies)
     args = parser.parse_args()
 

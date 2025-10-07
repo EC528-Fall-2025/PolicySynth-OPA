@@ -6,15 +6,6 @@ from cli import main
 
 
 class TestCLIMain(unittest.TestCase):
-    def test_main_dispatches_fetch_iam(self):
-        handler = Mock()
-        args = Namespace(command='fetch-iam', func=handler)
-
-        with patch('argparse.ArgumentParser.parse_args', return_value=args):
-            main()
-
-        handler.assert_called_once_with(args)
-
     def test_main_dispatches_fetch_scp(self):
         handler = Mock()
         args = Namespace(command='fetch-scp', func=handler)
