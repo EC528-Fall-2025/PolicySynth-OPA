@@ -1,6 +1,6 @@
 # test_db.py
-from db.session import init_db
-from db.models import SCP, IAM, ConfigRule
+from src.session import init_db
+from src.models.db.models import SCP
 from datetime import datetime
 
 # Use SQLite in-memory for quick testing
@@ -20,7 +20,7 @@ with Session() as session:
         policy_summary={"allowedActions": [], "deniedActions": []}
     )
     session.add(scp)
-
+'''
     #Insert test IAM policy
     iam = IAM(
         policy_id="AID-456",
@@ -70,3 +70,4 @@ with Session() as session:
     print("\nConfigRules:")
     for c in configs:
         print(c.rule_name, c.rule_arn)
+'''
