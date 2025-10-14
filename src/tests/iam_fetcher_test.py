@@ -15,19 +15,24 @@ sys.path.insert(0, os.path.abspath("."))
 
 
 class FakePaginator:
-    def __init__(self, pages: List[Dict[str, Any]]): self._pages = pages
+    def __init__(self, pages: List[Dict[str, Any]]):
+        self._pages = pages
 
-    def paginate(self):
+    def paginate(self, **kwargs):
+        self.seen_kwargs = kwargs
         for p in self._pages:
             yield p
 
 
 class FakeIAM:
-    def __init__(self, pages): self._pages = pages
+    def __init__(self, pages):
+        self._pages = pages
+        self.last_paginator = None
 
     def get_paginator(self, name: str):
         assert name == "list_policies"
-        return FakePaginator(self._pages)
+        self.last_paginator = FakePaginator(self._pages)
+        return self.last_paginator
 
 
 class FakeSTS:
