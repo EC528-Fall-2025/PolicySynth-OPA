@@ -1,5 +1,6 @@
 from src.utils.s3_handler import S3Handler
 import logging
+logger = logging.getLogger(__name__)
 
 #handler = S3Handler(bucket_name="policy-synthesizer-test-bucket", region_name="us-east-1")
 #handler.put_json(f"metadata/test.json", {"message": "hello from PolicySynth!"})
