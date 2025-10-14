@@ -1,2 +1,5 @@
-SQLAlchemy>=2.0.43
-boto3 == 1.40.39
+boto3
+botocore
+typer
+pytest
+requests

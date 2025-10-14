@@ -1,0 +1,18 @@
+{
+  "created_at": "2025-10-14T06:00:46.804516+00:00",
+  "root": "policy/terraform",
+  "files": [
+    {
+      "path": "terraform/README.md",
+      "sha256": "2cab77a17f5d154356fcdc339e320c7861b38178f933d765c1e5afcbea12cf75"
+    },
+    {
+      "path": "terraform/manifest.yaml",
+      "sha256": "7cfbf0782d3c737e2a73372a97aec5f3f360a61533531527d196e0470c4ed366"
+    },
+    {
+      "path": "terraform/policy.rego",
+      "sha256": "2b7de97010518008a7566dbc6a2868662102e93d0f3545504eefe5f0f0b74e96"
+    }
+  ]
+}
