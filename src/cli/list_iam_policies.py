@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Optional
 
-from src.services.IAM_fetcher import collect_policies, FetchError
+from src.services.IAM_fetcher import IAMPolicyFetcher, FetchError
 from src.models.IAM import to_json
 
 
@@ -48,19 +47,21 @@ def main() -> None:
     args = parse_args()
 
     # Basic validation
-    if args.page_size is not None and args.page_size <= 0:
+    if args.page_size <= 0:
         print("Error: --page-size must be a positive integer.", file=sys.stderr)
         sys.exit(2)
 
     try:
-        inv = collect_policies(
-            profile=args.profile,
-            region=args.region,
+        # instantiate the DI-friendly fetcher
+        fetcher = IAMPolicyFetcher(profile=args.profile, region=args.region)
+
+        inv = fetcher.collect_policies(
             scope=args.scope,
             only_attached=args.only_attached,
-            page_size=(args.page_size if args.page_size is not None else 100),
+            page_size=args.page_size,
             max_items=args.max_items,
         )
+
         payload = to_json(inv, pretty=args.pretty)
 
         if args.output:
@@ -69,13 +70,11 @@ def main() -> None:
             if not args.quiet:
                 print(f"Wrote {len(payload)} bytes to {args.output}", file=sys.stderr)
         else:
-            # Emit JSON to stdout
-            print(payload)
+            print(payload)  # JSON to stdout
 
         sys.exit(0)
 
     except FetchError as e:
-        # IAM/boto errors
         print(str(e), file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:

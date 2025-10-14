@@ -1,7 +1,7 @@
 # src/services/IAM_fetcher.py
 from __future__ import annotations
 
-from typing import Optional, List
+from typing import Optional, Callable, List
 from datetime import datetime, timezone
 
 import boto3
@@ -38,68 +38,70 @@ def _build_summary(item: dict) -> PolicySummary:
     )
 
 
-def collect_policies(
-    profile: Optional[str] = None,
-    region: Optional[str] = None,
-    *,
-    # "All" | "AWS" | "Local"
-    scope: str = "All",
-    only_attached: bool = False,
-    page_size: int = 100,
-    max_items: Optional[int] = None,
-) -> Inventory:
-    """
-    Connect with the given profile/region and return an Inventory of IAM policies.
-    - Uses IAM ListPolicies paginator.
-    - Builds minimal PolicySummary list (no policy document).
-    """
-    try:
-        # Session & clients
+class IAMPolicyFetcher:
+
+    def __init__(
+        self,
+        *,
+        profile: Optional[str] = None,
+        region: Optional[str] = None,
+        session_factory: Callable[..., boto3.Session] = boto3.Session,
+    ) -> None:
         session_kwargs = {}
         if profile:
             session_kwargs["profile_name"] = profile
         if region:
             session_kwargs["region_name"] = region
-        session = boto3.Session(**session_kwargs)
 
-        iam = session.client("iam")
-        sts = session.client("sts")
+        self._session = session_factory(**session_kwargs)
+        self._iam = self._session.client("iam")
+        self._sts = self._session.client("sts")
 
-        # account id & retrieval time
-        account_id = sts.get_caller_identity()["Account"]
-        retrieved_at = _iso8601_utc(datetime.now(timezone.utc))
+    def collect_policies(
+        self,
+        *,
+        scope: str = "All",            # "All" | "AWS" | "Local"
+        only_attached: bool = False,
+        page_size: int = 100,
+        max_items: Optional[int] = None,
+    ) -> Inventory:
+        """
+        List IAM policies using the paginator and return a structured Inventory.
+        """
+        try:
+            # account id & retrieval time
+            account_id = self._sts.get_caller_identity()["Account"]
+            retrieved_at = _iso8601_utc(datetime.now(timezone.utc))
 
-        # paginate ListPolicies
-        paginator = iam.get_paginator("list_policies")
-        pagination_config = {"PageSize": page_size} if page_size else {}
-        page_iterator = paginator.paginate(
-            Scope=scope, OnlyAttached=only_attached, PaginationConfig=pagination_config
-        )
+            # paginator with explicit kwargs (mirrors real boto3 usage)
+            paginator = self._iam.get_paginator("list_policies")
+            kwargs = {"Scope": scope, "OnlyAttached": only_attached}
+            if page_size:
+                kwargs["PaginationConfig"] = {"PageSize": page_size}
 
-        summaries: List[PolicySummary] = []
-        pages_count = 0
+            page_iterator = paginator.paginate(**kwargs)
 
-        for page in page_iterator:
-            pages_count += 1
-            for item in page.get("Policies", []):
-                summaries.append(_build_summary(item))
-                if max_items is not None and len(summaries) >= max_items:
-                    # stop early
-                    pagination = Pagination(pages=pages_count, page_size=page_size or 0)
-                    return Inventory(
-                        account_id=account_id,
-                        retrieved_at=retrieved_at,
-                        policies=summaries,
-                        pagination=pagination,
-                    )
+            summaries: List[PolicySummary] = []
+            pages_count = 0
 
-        pagination = Pagination(pages=pages_count, page_size=page_size or 0)
-        return Inventory(
-            account_id=account_id,
-            retrieved_at=retrieved_at,
-            policies=summaries,
-            pagination=pagination,
-        )
+            for page in page_iterator:
+                pages_count += 1
+                for item in page.get("Policies", []):
+                    summaries.append(_build_summary(item))
+                    if max_items is not None and len(summaries) >= max_items:
+                        return Inventory(
+                            account_id=account_id,
+                            retrieved_at=retrieved_at,
+                            policies=summaries,
+                            pagination=Pagination(pages=pages_count, page_size=page_size or 0),
+                        )
 
-    except (ClientError, BotoCoreError) as e:
-        raise FetchError(f"Failed to list IAM policies: {e}") from e
+            return Inventory(
+                account_id=account_id,
+                retrieved_at=retrieved_at,
+                policies=summaries,
+                pagination=Pagination(pages=pages_count, page_size=page_size or 0),
+            )
+
+        except (ClientError, BotoCoreError) as e:
+            raise FetchError(f"Failed to list IAM policies: {e}") from e

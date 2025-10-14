@@ -1,22 +1,24 @@
 # tests/test_iam_fetcher.py
 from __future__ import annotations
-from src.services.IAM_fetcher import collect_policies, FetchError
 
-import os
-import sys
+import os, sys
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 
-import boto3
 import pytest
 from botocore.exceptions import BotoCoreError
 
 sys.path.insert(0, os.path.abspath("."))
 
+from src.services.IAM_fetcher import IAMPolicyFetcher, FetchError
+
+
+# -------- fakes --------
 
 class FakePaginator:
     def __init__(self, pages: List[Dict[str, Any]]):
         self._pages = pages
+        self.seen_kwargs = None
 
     def paginate(self, **kwargs):
         self.seen_kwargs = kwargs
@@ -57,7 +59,10 @@ def make_fake_session_factory(pages, raise_sts=False):
                 return FakeSTS(raise_error=raise_sts)
             raise AssertionError(f"unexpected client {name}")
 
-    return _FakeSession
+    def _factory(**kwargs):
+        return _FakeSession(**kwargs)
+
+    return _factory
 
 
 def _item(i: int):
@@ -72,26 +77,30 @@ def _item(i: int):
     }
 
 
-def test_single_page(monkeypatch):
+# -------- tests --------
+
+def test_single_page():
     pages = [{"Policies": [_item(1), _item(2)]}]
-    monkeypatch.setattr(boto3, "Session", make_fake_session_factory(pages))
-    inv = collect_policies(page_size=50)
+    fetcher = IAMPolicyFetcher(session_factory=make_fake_session_factory(pages))
+    inv = fetcher.collect_policies(page_size=50)
+
     assert inv.account_id == "123456789012"
     assert inv.pagination.pages == 1 and inv.pagination.page_size == 50
     assert len(inv.policies) == 2 and inv.policies[0].name == "Demo1"
     assert inv.policies[0].update_date.endswith("Z")
 
 
-def test_multi_page_with_cap(monkeypatch):
-    pages = [{"Policies": [_item(1), _item(2)]}, {"Policies": [_item(3), _item(4)]}]
-    monkeypatch.setattr(boto3, "Session", make_fake_session_factory(pages))
-    inv = collect_policies(page_size=2, max_items=3)
+def test_multi_page_with_cap():
+    pages = [{"Policies": [_item(1), _item(2)]}, {"Policies": [_item(3), _item(4)]}, ]
+    fetcher = IAMPolicyFetcher(session_factory=make_fake_session_factory(pages))
+    inv = fetcher.collect_policies(page_size=2, max_items=3)
+
     assert inv.pagination.pages == 2 and inv.pagination.page_size == 2
     assert [p.name for p in inv.policies] == ["Demo1", "Demo2", "Demo3"]
 
 
-def test_error_path(monkeypatch):
+def test_error_path():
     pages = [{"Policies": []}]
-    monkeypatch.setattr(boto3, "Session", make_fake_session_factory(pages, raise_sts=True))
+    fetcher = IAMPolicyFetcher(session_factory=make_fake_session_factory(pages, raise_sts=True))
     with pytest.raises(FetchError):
-        collect_policies()
+        fetcher.collect_policies()
