@@ -1,0 +1,28 @@
+[
+  {
+    "Document": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "organizations:ListPolicies",
+            "organizations:DescribePolicy",
+            "organizations:ListPoliciesForTarget",
+            "organizations:AttachPolicy",
+            "organizations:DetachPolicy",
+            "organizations:ListTargetsForPolicy",
+            "organizations:ListAccounts",
+            "iam:ListPolicies",
+            "iam:GetPolicy",
+            "iam:GetPolicyVersion"
+          ],
+          "Resource": "*"
+        }
+      ]
+    },
+    "VersionId": "v2",
+    "IsDefaultVersion": true,
+    "CreateDate": "2025-10-01 20:55:47+00:00"
+  }
+]
