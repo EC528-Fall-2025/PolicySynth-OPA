@@ -10,10 +10,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 from src.models.IAM import PolicySummary, Inventory, Pagination
 
 
+# Custom error for handling IAM policy fetch failures
 class FetchError(RuntimeError):
     """Raised when fetching IAM policies fails in a user-visible way."""
 
 
+# Convert datetime to ISO8601 UTC string format
 def _iso8601_utc(dt: datetime) -> str:
     """Normalize datetimes to ISO8601 UTC (e.g., '2025-10-03T19:02:11Z')."""
     if dt.tzinfo is None:
@@ -23,6 +25,7 @@ def _iso8601_utc(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Build a PolicySummary object from a single IAM ListPolicies response item
 def _build_summary(item: dict) -> PolicySummary:
     """Map one ListPolicies item to PolicySummary (minimal fields only)."""
     update = item.get("UpdateDate")
@@ -38,8 +41,10 @@ def _build_summary(item: dict) -> PolicySummary:
     )
 
 
+# Use for injection in the future
 class IAMPolicyFetcher:
 
+    # Initialize IAMPolicyFetcher with AWS session, IAM and STS clients
     def __init__(
         self,
         *,
@@ -57,6 +62,7 @@ class IAMPolicyFetcher:
         self._iam = self._session.client("iam")
         self._sts = self._session.client("sts")
 
+    # Collect IAM policies and return a structured Inventory object
     def collect_policies(
         self,
         *,

@@ -8,6 +8,7 @@ from src.services.IAM_fetcher import IAMPolicyFetcher, FetchError
 from src.models.IAM import to_json
 
 
+# Parse and return command-line arguments for the IAM policy listing CLI
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="List IAM policies and emit structured JSON (minimal MVP for the issue)."
@@ -43,6 +44,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# Main entry point of the CLI, fetch IAM policies and output as JSON
 def main() -> None:
     args = parse_args()
 
