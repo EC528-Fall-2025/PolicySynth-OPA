@@ -1,0 +1,190 @@
+[
+  {
+    "Name": "Deny-NonApproved-Regions",
+    "Description": "Restrict all actions to approved regions only (us-east-1, us-west-2, eu-west-1).",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "DenyAllExceptApprovedRegions",
+          "Effect": "Deny",
+          "Action": "*",
+          "Resource": "*",
+          "Condition": {
+            "StringNotEquals": {
+              "aws:RequestedRegion": [
+                "us-east-1",
+                "us-west-2",
+                "eu-west-1"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "Name": "Require-Encryption-S3-EBS-RDS",
+    "Description": "Require encryption for S3 object uploads, EBS volumes, and RDS instances.",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "DenyUnencryptedS3Uploads",
+          "Effect": "Deny",
+          "Action": "s3:PutObject",
+          "Resource": "arn:aws:s3:::*/*",
+          "Condition": {
+            "Null": {
+              "s3:x-amz-server-side-encryption": "true"
+            }
+          }
+        },
+        {
+          "Sid": "DenyS3UploadsWithoutKMS",
+          "Effect": "Deny",
+          "Action": "s3:PutObject",
+          "Resource": "arn:aws:s3:::*/*",
+          "Condition": {
+            "StringNotEqualsIfExists": {
+              "s3:x-amz-server-side-encryption": "aws:kms"
+            }
+          }
+        },
+        {
+          "Sid": "DenyUnencryptedEBSVolumes",
+          "Effect": "Deny",
+          "Action": [
+            "ec2:CreateVolume",
+            "ec2:RunInstances"
+          ],
+          "Resource": "*",
+          "Condition": {
+            "Bool": {
+              "ec2:Encrypted": "false"
+            }
+          }
+        },
+        {
+          "Sid": "DenyUnencryptedRDSInstances",
+          "Effect": "Deny",
+          "Action": [
+            "rds:CreateDBInstance",
+            "rds:RestoreDBInstanceFromS3",
+            "rds:RestoreDBInstanceToPointInTime",
+            "rds:CreateDBCluster",
+            "rds:RestoreDBClusterFromS3",
+            "rds:RestoreDBClusterToPointInTime"
+          ],
+          "Resource": "*",
+          "Condition": {
+            "Bool": {
+              "rds:StorageEncrypted": "false"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "Name": "Deny-Public-S3-And-Require-BlockPublicAccess",
+    "Description": "Deny making S3 buckets or objects public and enforce Block Public Access settings.",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "DenyPublicACLsOnBucketsAndObjects",
+          "Effect": "Deny",
+          "Action": [
+            "s3:PutBucketAcl",
+            "s3:PutObjectAcl"
+          ],
+          "Resource": [
+            "arn:aws:s3:::*",
+            "arn:aws:s3:::*/*"
+          ],
+          "Condition": {
+            "StringEqualsIfExists": {
+              "s3:x-amz-acl": [
+                "public-read",
+                "public-read-write",
+                "authenticated-read"
+              ]
+            }
+          }
+        },
+        {
+          "Sid": "DenyDisablingBlockPublicAccess",
+          "Effect": "Deny",
+          "Action": [
+            "s3:PutAccountPublicAccessBlock",
+            "s3:PutBucketPublicAccessBlock"
+          ],
+          "Resource": "*",
+          "Condition": {
+            "BoolIfExists": {
+              "s3:PublicAccessBlockConfiguration/BlockPublicAcls": "false",
+              "s3:PublicAccessBlockConfiguration/IgnorePublicAcls": "false",
+              "s3:PublicAccessBlockConfiguration/BlockPublicPolicy": "false",
+              "s3:PublicAccessBlockConfiguration/RestrictPublicBuckets": "false"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "Name": "Require-Tags-And-VPC-For-EC2",
+    "Description": "Require 'Environment' tag on EC2 and restrict launches to specific VPCs.",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "DenyRunInstancesWithoutEnvironmentTag",
+          "Effect": "Deny",
+          "Action": "ec2:RunInstances",
+          "Resource": "*",
+          "Condition": {
+            "Null": {
+              "aws:RequestTag/Environment": "true"
+            }
+          }
+        },
+        {
+          "Sid": "DenyRunInstancesOutsideApprovedVPCs",
+          "Effect": "Deny",
+          "Action": "ec2:RunInstances",
+          "Resource": "*",
+          "Condition": {
+            "StringNotEquals": {
+              "ec2:Vpc": [
+                "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0abc123def4567890",
+                "arn:aws:ec2:us-west-2:123456789012:vpc/vpc-0abc123def4567891"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "Name": "Require-IMDSv2-For-EC2",
+    "Description": "Deny launching EC2 instances unless Instance Metadata Service requires IMDSv2 tokens.",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Sid": "IMDSv2Only",
+          "Effect": "Deny",
+          "Action": "ec2:RunInstances",
+          "Resource": "*",
+          "Condition": {
+            "StringNotEquals": {
+              "ec2:MetadataHttpTokens": "required"
+            }
+          }
+        }
+      ]
+    }
+  }
+]
