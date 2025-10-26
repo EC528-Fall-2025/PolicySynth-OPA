@@ -50,20 +50,20 @@ class SCPFetcher:
                             "them in config.")
 
     # NOTE: will we have to make these async at any point?
-    def fetch_scp(self):
+    def fetch_scp(self, Filter=Keywords.SERVICE_CONTROL_POLICY.value):
         try:
             scps = []
             paginator = self.organizations_client.get_paginator('list_policies')
-
-            service_control_policy = Keywords.SERVICE_CONTROL_POLICY.value
-            for page in paginator.paginate(Filter=service_control_policy):
+            for page in paginator.paginate(Filter=Filter):
                 for retrieved_policy in page['Policies']:
                     policy_details = self.organizations_client.describe_policy(
                         PolicyId=retrieved_policy['Id']
                     )
                     # NOTE: do something with data handling here
-                    scp_policy: SCP = SCP.from_aws_response(policy_details)
+                    # not using handler, should we use it or just go like this?
+                    scp_policy: SCP = policy_details['Policy']
                     scps.append(scp_policy)
+
             # NOTE: opa only handles json/yaml, so we can serialize
             # this when translating
             return scps
