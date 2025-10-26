@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 from src.models.db.models import (
     Base,
     SCP,
-    #IAM,
-    #ConfigRule,
     CloudGuardrail,
     OpaPolicy,
     SyncEvent
@@ -46,48 +44,6 @@ def test_scp_insert_and_query(db_session):
     assert result.aws_managed is False
     assert isinstance(result.created_at, datetime)
 
-
-# --- IAM ---
-'''
-def test_iam_insert_and_query(db_session):
-    iam = IAM(
-        policy_id="AID-456",
-        arn="arn:aws:iam::123456789012:policy/TestPolicy",
-        name="Test IAM",
-        description="Test IAM policy",
-        aws_managed=True,
-        content={"Statement": []},
-        policy_summary={"allowedActions": [], "deniedActions": []}
-    )
-
-    db_session.add(iam)
-    db_session.commit()
-
-    result = db_session.query(IAM).first()
-    assert result.name == "Test IAM"
-    assert result.aws_managed is True
-
-
-# --- ConfigRule ---
-def test_configrule_insert_and_query(db_session):
-    config = ConfigRule(
-        rule_name="TestConfigRule",
-        rule_arn="arn:aws:config:rule/TestConfigRule",
-        description="Test Config rule",
-        scope={"ComplianceResourceTypes": ["AWS::S3::Bucket"]},
-        source_identifier="AWSManaged",
-        input_parameters={},
-        managed=True
-    )
-
-    db_session.add(config)
-    db_session.commit()
-
-    result = db_session.query(ConfigRule).first()
-    assert result.rule_name == "TestConfigRule"
-    assert result.scope["ComplianceResourceTypes"] == ["AWS::S3::Bucket"]
-
-'''
 # --- CloudGuardrail + OpaPolicy + SyncEvent (Relationship Test) ---
 def test_guardrail_policy_sync_relationships(db_session):
     # Create a CloudGuardrail
