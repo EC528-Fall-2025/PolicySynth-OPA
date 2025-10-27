@@ -1,6 +1,7 @@
 name: SCP Policy Fetch
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       output_file:
