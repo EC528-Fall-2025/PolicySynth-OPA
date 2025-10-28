@@ -19,8 +19,16 @@ jobs:
     - name: install psynth cli
       run: |
         pip install psynth
-        which psynth || echo "psynth not found in PATH"
-        python -m psynth --help || echo "psynth module not accessible"
+        echo "=== Checking installation ==="
+        pip show psynth
+        echo "=== Checking installed scripts ==="
+        pip show -f psynth | grep -E "(bin/|scripts/)" || echo "No scripts found"
+        echo "=== Checking Python path ==="
+        python -c "import sys; print('\n'.join(sys.path))"
+        echo "=== Trying to import ==="
+        python -c "import psynth; print('Import successful'); print(dir(psynth))"
+        echo "=== Checking for entry points ==="
+        python -c "import pkg_resources; eps = list(pkg_resources.iter_entry_points('console_scripts')); print([ep.name for ep in eps if 'psynth' in ep.name])"
     
     - name: configure credentials
       uses: aws-actions/configure-aws-credentials@v4
