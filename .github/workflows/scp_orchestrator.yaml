@@ -30,7 +30,7 @@ jobs:
 
     - name: fetch policies
       run: |
-        python -m psynth fetch-scp
+        psynth fetch-scp
       env:
         OUTPUT_FILE: ${{ inputs.output_file || 'service_control_policies.json' }}
     
