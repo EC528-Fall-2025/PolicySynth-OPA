@@ -32,12 +32,12 @@ jobs:
       run: |
         psynth fetch-scp
       env:
-        OUTPUT_FILE: ${{ inputs.output_file || 'service_control_policies.json' }}
+        OUTPUT_FILE: service_control_policies.json
     
     - name: push policies
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add ${{ inputs.output_file || 'service_control_policies.json' }}
+        git add "service_control_policies.json"
         git commit -m "Manual SCP fetch - $(date -u +"%Y-%m-%d %H:%M:%S UTC")" || exit 0
         git push || exit 0
