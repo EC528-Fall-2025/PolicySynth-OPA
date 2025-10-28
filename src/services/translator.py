@@ -52,13 +52,11 @@ def translate(scp_policy):
     }}
 """
             rego_rules.append(rule.strip())
-    
-    rules_str = "\n\n".join(rego_rules)
     policy = f"""
     package aws.scp.{policy_name.replace('-','_')}
     default allow = false
     default deny = false
-    {rules_str}
+    {"\n\n".join(rego_rules)}
 """
     save_rego_files(policy_name, policy) # save generated rego policy in folder
     
