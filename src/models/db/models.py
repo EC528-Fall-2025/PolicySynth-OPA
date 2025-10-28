@@ -1,9 +1,9 @@
 from sqlalchemy import (
     Column, String, Text, Enum, Integer, ForeignKey, DateTime, JSON, Boolean
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 import uuid
 from datetime import datetime, timezone
 
@@ -43,7 +43,7 @@ class PolicyPack(Base):
     __tablename__ = "policy_packs"
     id = Column(String, primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
-    opa_policy_ids = Column(ARRAY(String))  # if your DB supports ARRAY
+    opa_policy_ids = Column(JSON(String))
     pipeline_target = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -58,7 +58,7 @@ class SyncEvent(Base):
     details = Column(Text)
     timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-class SCPModel(Base):
+class SCP(Base):
     __tablename__ = "scp_policies"
 
     id = Column(String, primary_key=True, default=gen_uuid)
@@ -73,3 +73,35 @@ class SCPModel(Base):
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+'''
+class IAM(Base):
+    __tablename__ = "iam_policies"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    policy_id = Column(String, nullable = False)
+    arn = Column(String, nullable=False, unique=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    aws_managed = Column(Boolean, default=False, nullable=False)
+    content = Column(JSON, nullable=False)  # store the raw IAM JSON policy
+    policy_summary = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+class ConfigRule(Base):
+    __tablename__ = "config_rules"
+
+    id = Column(String, primary_key=True, default=gen_uuid)
+    rule_name = Column(String, nullable=False, unique=True)
+    rule_arn = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    scope = Column(JSON, nullable=True)  # target resources (e.g., EC2, S3)
+    source_identifier = Column(String, nullable=False)  # e.g., AWS managed rule ID or Lambda ARN
+    input_parameters = Column(JSON, nullable=True)
+    managed = Column(Boolean, default=True, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+'''
