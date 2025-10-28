@@ -19,6 +19,8 @@ jobs:
     - name: install psynth cli
       run: |
         pip install psynth
+        which psynth || echo "psynth not found in PATH"
+        python -m psynth --help || echo "psynth module not accessible"
     
     - name: configure credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -29,7 +31,7 @@ jobs:
 
     - name: fetch policies
       run: |
-        psynth fetch-scp
+        python -m psynth fetch-scp
       env:
         OUTPUT_FILE: ${{ inputs.output_file || 'service_control_policies.json' }}
     
