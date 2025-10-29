@@ -1,9 +1,9 @@
 # Policy Synth-OPA 
 **Sprint Demos** 
 ======================================
-Demo 1 : https://drive.google.com/file/d/13vXFEJPiSFUn6UjQapNafNg7wZJIoSYG/view?usp=sharing  
-Demo 2: https://drive.google.com/file/d/1fVXYtDovJw-2uzuXpI-Kpo2wbSCbAO0t/view?usp=sharing
-Demo 3: https://drive.google.com/file/d/1i2ixh5NtVLBPdyAURwqlz1MEpwqTl0hF/view?usp=sharing
+- Demo 1 : https://drive.google.com/file/d/13vXFEJPiSFUn6UjQapNafNg7wZJIoSYG/view?usp=sharing  
+- Demo 2: https://drive.google.com/file/d/1fVXYtDovJw-2uzuXpI-Kpo2wbSCbAO0t/view?usp=sharing
+- Demo 3: https://drive.google.com/file/d/1i2ixh5NtVLBPdyAURwqlz1MEpwqTl0hF/view?usp=sharing
 
 **Vision and Goals of the Project:**
 ======================================
