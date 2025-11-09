@@ -415,14 +415,10 @@ class TestCaseGenerator:
         """Check if value matches pattern (supports wildcards)"""
         if pattern == '*':
             return True
+        import re
+        regex = '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
         
-        if '*' in pattern:
-            pattern_parts = pattern.split('*')
-            if len(pattern_parts) == 2:
-                prefix, suffix = pattern_parts
-                return value.startswith(prefix) and value.endswith(suffix)
-        
-        return value == pattern
+        return re.match(regex, value) is not None
 
 
 class OPARunner:
@@ -779,17 +775,9 @@ class SCPEvaluator:
         if pattern == '*':
             return True
         
-        if '*' in pattern:
-            # Simple wildcard matching
-            pattern_parts = pattern.split('*')
-            if len(pattern_parts) == 2:
-                prefix, suffix = pattern_parts
-                return value.startswith(prefix) and value.endswith(suffix)
-            # More complex wildcards - simple implementation
-            # In production, you'd want more sophisticated matching
-            return True
-        
-        return value == pattern
+        import re
+        regex = '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
+        return re.match(regex, value) is not None
     
     def _evaluate_conditions(self, conditions: Dict[str, Any], context: Dict[str, Any]) -> bool:
         """
