@@ -90,7 +90,7 @@ class ComparisonResult:
 class ValidationReport:
     """Complete validation report for a policy"""
     policy_name: str
-    syntax_check: SyntaxCheckResult
+    syntax_check: SyntaxCheckResult = field(default_factory=lambda: SyntaxCheckResult(valid=False))
     comparison_results: List[ComparisonResult] = field(default_factory=list)
     total_tests: int = 0
     passed_tests: int = 0
@@ -888,6 +888,21 @@ class SCPValidator:
         
         with open(scp_path, 'r') as f:
             scp_json = json.load(f)
+            
+        try:
+            if isinstance(scp_json, dict):
+                # Case 1: Full AWS describe-policy shape
+                if "Policy" in scp_json and isinstance(scp_json["Policy"], dict):
+                    content = scp_json["Policy"].get("Content")
+                    if isinstance(content, str):
+                        # Content is a JSON string -> parse it
+                        scp_json = json.loads(content)
+                # Case 2: Some tools save {"Content": "<json string>"} directly
+                elif "Content" in scp_json and isinstance(scp_json["Content"], str):
+                    scp_json = json.loads(scp_json["Content"])
+        except Exception as _:
+            # If unwrap fails, keep original; later logic will surface helpful errors
+            pass
         
         # Load Rego policy
         rego_path = self.rego_dir / f"{policy_name}.rego"
