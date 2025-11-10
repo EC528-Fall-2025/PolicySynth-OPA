@@ -1,53 +1,56 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: PolicySynth-OPA – Event-driven SCP→OPA generation/validation/deploy
+Description: PolicySynth-OPA – Event-driven SCP → OPA pipeline
 
 Parameters:
   ArtifactBucket:
     Type: String
-    Description: S3 bucket for generated and distributed artifacts
+    Description: S3 bucket for generated/published bundles
   ArtifactPrefix:
     Type: String
     Default: generated/scp
-  DistPrefix:
+    Description: Staging prefix for in-flight artifacts
+  PublishedPrefix:
     Type: String
-    Default: dist/scp
+    Default: published/scp
+    Description: Final “enforced” bundle location
   OpaLayerArn:
     Type: String
-    Description: ARN of a Lambda Layer that provides /opt/bin/opa (optional)
-    Default: ""
+    Description: ARN of Lambda Layer providing /opt/bin/opa
   OrgId:
     Type: String
-    Description: (Optional) Constrain Orgs permissions to this Organizations ID
     Default: ""
+    Description: Optional — restrict Organizations access to this Org ID
+  EventBusName:
+    Type: String
+    Default: default
+    Description: EventBridge bus name that receives CreatePolicy/UpdatePolicy/DeletePolicy events
 
 Globals:
   Function:
     Runtime: python3.11
     Timeout: 120
-    MemorySize: 1024
+    MemorySize: 768
     Tracing: Active
     Environment:
       Variables:
         ARTIFACT_BUCKET: !Ref ArtifactBucket
         ARTIFACT_PREFIX: !Ref ArtifactPrefix
-        DIST_PREFIX: !Ref DistPrefix
+        PUBLISHED_PREFIX: !Ref PublishedPrefix
         OPA_BIN: /opt/bin/opa
-        WRITE_INTERMEDIATE: "true"
+    Layers:
+      - !Ref OpaLayerArn
 
 Resources:
-  ScpPipelineFn:
+  #### Lambdas
+  ScpRetrieveFn:
     Type: AWS::Serverless::Function
     Properties:
+      Handler: lambdas/scp_pipeline/retrieve.lambda_handler
       CodeUri: src
-      Handler: lambdas.scp_pipeline.app.lambda_handler
-      Description: Retrieve → Generate → Validate → Deploy OPA bundles from SCPs
-      Layers:
-        - !If [HasOpaLayer, !Ref OpaLayerArn, !Ref "AWS::NoValue"]
       Policies:
         - Statement:
-            - Sid: OrgsRead
-              Effect: Allow
+            - Effect: Allow
               Action:
                 - organizations:ListPolicies
                 - organizations:DescribePolicy
@@ -55,72 +58,152 @@ Resources:
               Condition:
                 StringEqualsIfExists:
                   aws:ResourceOrgID: !Ref OrgId
-            - Sid: S3RW
-              Effect: Allow
-              Action: [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ]
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+  ScpGenerateFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambdas/scp_pipeline/generate.lambda_handler
+      CodeUri: src
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+  ScpValidateFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambdas/scp_pipeline/validate.lambda_handler
+      CodeUri: src
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+  ScpDeployFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambdas/scp_pipeline/deploy.lambda_handler
+      CodeUri: src
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub arn:aws:s3:::${ArtifactBucket}/*
+  ScpDeleteFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambdas/scp_pipeline/delete.lambda_handler
+      CodeUri: src
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:DeleteObject
+                - s3:ListBucket
               Resource:
+                - !Sub arn:aws:s3:::${ArtifactBucket}
                 - !Sub arn:aws:s3:::${ArtifactBucket}/*
-      Events:
-        NightlySync:
-          Type: Schedule
-          Properties:
-            Schedule: cron(0 6 * * ? *)
-            Input: '{"stage":"retrieve_generate_validate_deploy"}'
 
-  # Step Functions definition: 3 tasks over a single Lambda to keep packaging simple.
+  #### Step Functions – orchestrates the workflow
   ScpPipelineStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      Name: policiesynth-scp-pipeline
+      Type: STANDARD
+      Tracing:
+        Enabled: true
       Definition:
-        StartAt: RetrieveGenerate
+        Comment: "SCP CRUD → Generate → Validate → Deploy (or Delete)"
+        StartAt: RouteByAction
         States:
-          RetrieveGenerate:
+          RouteByAction:
+            Type: Choice
+            Choices:
+              - Variable: $.action
+                StringEquals: DeletePolicy
+                Next: Delete
+              - Variable: $.action
+                StringEquals: CreatePolicy
+                Next: Retrieve
+              - Variable: $.action
+                StringEquals: UpdatePolicy
+                Next: Retrieve
+            Default: Retrieve
+          Retrieve:
             Type: Task
-            Resource: !GetAtt ScpPipelineFn.Arn
+            Resource: !GetAtt ScpRetrieveFn.Arn
+            ResultPath: $.retrieved
+            Next: Generate
+          Generate:
+            Type: Task
+            Resource: !GetAtt ScpGenerateFn.Arn
             Parameters:
-              stage: "retrieve_generate"
-              # pass through the event payload if the rule supplied it
-              "scp_s3.$": "$.scp_s3"
-              "detail.$": "$.detail"
-            ResultPath: "$.rg"
+              retrieved.$: $.retrieved
+            ResultPath: $.generated
             Next: Validate
           Validate:
             Type: Task
-            Resource: !GetAtt ScpPipelineFn.Arn
+            Resource: !GetAtt ScpValidateFn.Arn
             Parameters:
-              stage: "validate"
-              "bundle_b64.$": "$.rg.body.bundle_b64"
-            ResultPath: "$.val"
+              generated.$: $.generated
+            ResultPath: $.validated
             Next: Deploy
           Deploy:
             Type: Task
-            Resource: !GetAtt ScpPipelineFn.Arn
+            Resource: !GetAtt ScpDeployFn.Arn
             Parameters:
-              stage: "deploy"
-              "bundle_b64.$": "$.rg.body.bundle_b64"
-              "meta.$": "$.rg.body.meta"
-            ResultPath: "$.deploy"
+              generated.$: $.generated
+              validated.$: $.validated
+            ResultPath: $.deployed
+            End: true
+          Delete:
+            Type: Task
+            Resource: !GetAtt ScpDeleteFn.Arn
+            ResultPath: $.deleted
             End: true
       Policies:
         - LambdaInvokePolicy:
-            FunctionName: !Ref ScpPipelineFn
+            FunctionName: !Ref ScpRetrieveFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ScpGenerateFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ScpValidateFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ScpDeployFn
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ScpDeleteFn
 
-  # EventBridge rule: send Orgs SCP CRUD events into the state machine
+  #### EventBridge → Step Functions (SCP CRUD)
   ScpCrudRule:
     Type: AWS::Events::Rule
     Properties:
-      Description: Triggers state machine when SCPs are created/updated/deleted
+      EventBusName: !Ref EventBusName
       EventPattern:
-        source: [ "aws.organizations" ]
-        detail-type: [ "AWS API Call via CloudTrail" ]
+        source: ["aws.organizations"]
+        detail-type: ["AWS API Call via CloudTrail"]
         detail:
-          eventSource: [ "organizations.amazonaws.com" ]
-          eventName: [ "CreatePolicy", "UpdatePolicy", "DeletePolicy" ]
+          eventSource: ["organizations.amazonaws.com"]
+          eventName: ["CreatePolicy", "UpdatePolicy", "DeletePolicy"]
       Targets:
         - Arn: !Ref ScpPipelineStateMachine
-          Id: ScpPipelineSMTarget
+          Id: ScpSfnTarget
           RoleArn: !GetAtt EventsToSfnRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              detail: $.detail
+            InputTemplate: |
+              {
+                "action": <detail.eventName>,
+                "policyId": <detail.responseElements.policy.policySummary.id>,
+                "policyName": <detail.responseElements.policy.policySummary.name>,
+                "policyContent": <detail.responseElements.policy.content>
+              }
 
   EventsToSfnRole:
     Type: AWS::IAM::Role
@@ -132,7 +215,7 @@ Resources:
             Principal: { Service: events.amazonaws.com }
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: events-to-sfn
+        - PolicyName: AllowStartExecution
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -140,11 +223,16 @@ Resources:
                 Action: states:StartExecution
                 Resource: !Ref ScpPipelineStateMachine
 
-Conditions:
-  HasOpaLayer: !Not [ !Equals [ !Ref OpaLayerArn, "" ] ]
-
 Outputs:
-  LambdaName:
-    Value: !Ref ScpPipelineFn
   StateMachineArn:
     Value: !Ref ScpPipelineStateMachine
+  RetrieveFnArn:
+    Value: !GetAtt ScpRetrieveFn.Arn
+  GenerateFnArn:
+    Value: !GetAtt ScpGenerateFn.Arn
+  ValidateFnArn:
+    Value: !GetAtt ScpValidateFn.Arn
+  DeployFnArn:
+    Value: !GetAtt ScpDeployFn.Arn
+  DeleteFnArn:
+    Value: !GetAtt ScpDeleteFn.Arn
