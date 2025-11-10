@@ -4,7 +4,8 @@ import boto3
 import types
 
 # import modules from your new package
-from src.lambdas.scp_sync import app, aws, opa_validator, policy_generator
+from src.lambdas.scp_pipeline import app, opa_validator
+from src.lambdas.scp_sync import aws, policy_generator
 
 DUMMY_SCPS = [
     {
@@ -34,7 +35,7 @@ def test_create_happy_path(tmp_path, monkeypatch):
     s3.create_bucket(Bucket=bucket)
 
     # 3) make the lambda use THIS moto client instance
-    from src.lambdas.scp_sync import aws, app, opa_validator
+    from src.lambdas.scp_sync import aws
     monkeypatch.setattr(aws, "_s3", lambda: s3)
 
     # 4) keep the rest the same
@@ -64,7 +65,7 @@ def test_update_and_delete(monkeypatch):
     bucket = "test-artifacts"
     s3.create_bucket(Bucket=bucket)
 
-    from src.lambdas.scp_sync import aws, app, opa_validator
+    from src.lambdas.scp_sync import aws
     monkeypatch.setattr(aws, "_s3", lambda: s3)
 
     monkeypatch.setattr(aws, "list_scps", lambda: DUMMY_SCPS)

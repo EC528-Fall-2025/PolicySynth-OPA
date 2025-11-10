@@ -1,7 +1,7 @@
 # Validates the base64 bundle with OPA binary from layer; returns report and passes bundle through
 from typing import Any, Dict
 from .common import ok, err, b64d
-from src.lambdas.scp_sync.opa_validator import run_validation_suite
+from src.lambdas.scp_pipeline.opa_validator import run_validation_suite
 
 def lambda_handler(event, _ctx):
     try:
