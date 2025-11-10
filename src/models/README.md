@@ -37,3 +37,20 @@ When running with the --policy argument, the validator loads exactly one pair of
 + <policy_name>.rego (the corresponding translated Rego policy).
 
 Other .json or .rego files in the same directory are ignored.
+
+### Examples
+
+#### Boolean allow policy
+python -m src.models.scp_validation \
+  --policy example_scp_restrict_regions \
+  --scp-dir src/tests/opa_test/scp/allow \
+  --rego-dir src/tests/opa_test/scp/allow \
+  --rego-query data.aws.scp.allow \
+  --rego-result-type allow_bool
+
+python -m src.models.scp_validation \
+  --policy example_scp_deny_s3_delete \
+  --scp-dir src/tests/opa_test/scp/deny \
+  --rego-dir src/tests/opa_test/scp/deny \
+  --rego-query data.aws.scp.deny \
+  --rego-result-type allow_bool
