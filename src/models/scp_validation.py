@@ -335,13 +335,15 @@ class TestCaseGenerator:
         """Generate test cases that should NOT match the policy"""
         cases = []
         
-        # Opposite effect for comparison
-        opposite_effect = Effect.ALLOW if effect == Effect.DENY else Effect.DENY
+        if effect == Effect.DENY:
+            return []
+        
+        opposite_effect = Effect.DENY
         
         # Different action (only if not wildcard)
         if actions and not '*' in actions:
             cases.append(TestCase(
-                action="ec2:TerminateInstances",  # Different service
+                action="ec2:TerminateInstances",
                 resource=resources[0] if resources else "*",
                 expected_effect=opposite_effect,
                 description=f"Statement {stmt_idx}: Negative case - different action"
