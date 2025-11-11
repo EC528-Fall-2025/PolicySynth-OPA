@@ -22,26 +22,18 @@ def _save_to_json(data: dict, filename: str) -> bool:
 def fetch_scp_policies(args):
     """
     fetch scp policies and save to json
-    If the AWS account is not part of an organization, handle gracefully by writing an empty result.
     """
     try:
         fetcher = SCPFetcher()
         policies = fetcher.fetch_scp()
 
         output_file = args.output or 'service_control_policies.json'
-        print(f"Successfully fetched {len(policies)} SCP policies")
+        print(f"Successfuly fetched {len(policies)} SCP policies")
         _save_to_json(policies, output_file)
     except Exception as e:
-        msg = str(e)
-        # If account is not member of an organization, treat as zero policies (graceful)
-        if 'AWSOrganizationsNotInUseException' in msg or 'not a member of an organization' in msg:
-            print("[psynth] Account not part of an AWS Organization. Writing empty policies file.")
-            output_file = args.output or 'service_control_policies.json'
-            _save_to_json({"policies": []}, output_file)
-            return
-        else:
-            print(f"An error ocurred fetching policies: {e}")
-            sys.exit(1)
+        print(f"An error ocurred fetching policies: {e}")
+        sys.exit(1)
+
 
 
 def main():
