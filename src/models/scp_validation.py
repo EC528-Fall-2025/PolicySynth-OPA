@@ -618,9 +618,23 @@ class OPARunner:
             return Decision.ERROR
         
         elif result_type == RegoResultType.ALLOW_BOOL:
+            # Strict type checking for boolean
+            if not isinstance(value, bool):
+                print(f"ERROR: ALLOW_BOOL mode expects boolean, got {type(value).__name__}: {value}")
+                print(f"  Hint: Your Rego should return 'true' or 'false', not a collection.")
+                print(f"  Example: allow := true if {{ ... }}")
+                return Decision.ERROR
+            
             return Decision.ALLOW if value is True else Decision.DENY
         
         elif result_type == RegoResultType.DENY_BOOL:
+            # Strict type checking for boolean
+            if not isinstance(value, bool):
+                print(f"ERROR: DENY_BOOL mode expects boolean, got {type(value).__name__}: {value}")
+                print(f"  Hint: Your Rego should return 'true' or 'false', not a collection.")
+                print(f"  Example: deny := true if {{ ... }}")
+                return Decision.ERROR
+            
             return Decision.DENY if value is True else Decision.ALLOW
         
         else:
