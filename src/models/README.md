@@ -48,6 +48,15 @@ python -m src.models.scp_validation \
   --rego-query data.aws.scp.allow \
   --rego-result-type allow_bool
 
+#### Boolean deny policy
+
+python -m src.models.scp_validation \
+  --policy deny_bool \
+  --scp-dir src/tests/opa_test/scp/deny \
+  --rego-dir src/tests/opa_test/scp/deny \
+  --rego-query data.aws.scp.deny \  
+  --rego-result-type deny_bool
+
 #### Deny-set policy (messages returned as list)
 python -m src.models.scp_validation \
   --policy example_scp_deny_s3_delete \
