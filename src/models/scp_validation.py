@@ -1,16 +1,16 @@
 """
-SCP Validation Module - FIXED VERSION
+SCP Validation Module
 
-This module validates that translated Rego policies behave consistently 
-with their original SCP JSON policies.
+Validates that translated Rego policies behave consistently with their 
+original SCP JSON policies.
 
-FIXES:
-1. SCP default semantics - implicit Deny (SCP as permission boundary)
-2. Deny priority - explicit Deny takes precedence
-3. Action/NotAction and Resource/NotResource mutual exclusivity
-4. Configurable Rego query and result type interpretation
+Features:
+- SCP default semantics (implicit Deny as permission boundary)
+- Deny priority (explicit Deny takes precedence)
+- Action/NotAction and Resource/NotResource mutual exclusivity
+- Configurable Rego query and result type interpretation
 
-Validation includes:
+Process:
 1. Syntax validation using 'opa check'
 2. Behavioral comparison between SCP and Rego
 3. Test execution using 'opa eval'
@@ -26,23 +26,24 @@ from dataclasses import dataclass, field
 from enum import Enum
 import glob
 from pathlib import Path
+import re
 
 
 class Effect(Enum):
-    """Policy effect types"""
+    """Policy effect types."""
     ALLOW = "Allow"
     DENY = "Deny"
 
 
 class Decision(Enum):
-    """Policy decision results"""
+    """Policy decision results."""
     ALLOW = "Allow"
     DENY = "Deny"
     ERROR = "Error"
 
 
 class RegoResultType(Enum):
-    """How to interpret Rego evaluation results"""
+    """How to interpret Rego evaluation results."""
     DENY_SET = "deny_set"      # Non-empty set/list = Deny
     ALLOW_BOOL = "allow_bool"  # true = Allow, false = Deny
     DENY_BOOL = "deny_bool"    # true = Deny, false = Allow
@@ -50,7 +51,7 @@ class RegoResultType(Enum):
 
 @dataclass
 class TestCase:
-    """Represents a single test case for policy validation"""
+    """Represents a single test case for policy validation."""
     action: str
     resource: str
     principal: str = "*"
@@ -59,7 +60,12 @@ class TestCase:
     description: str = ""
 
     def to_opa_input(self) -> Dict[str, Any]:
-        """Convert test case to OPA input format"""
+        """
+        Convert test case to OPA input format.
+        
+        Returns:
+            Dictionary suitable for OPA evaluation
+        """
         return {
             "action": self.action,
             "resource": self.resource,
@@ -70,7 +76,7 @@ class TestCase:
 
 @dataclass
 class SyntaxCheckResult:
-    """Result of Rego syntax validation"""
+    """Result of Rego syntax validation."""
     valid: bool
     error_message: str = ""
     warnings: List[str] = field(default_factory=list)
@@ -78,7 +84,7 @@ class SyntaxCheckResult:
 
 @dataclass
 class ComparisonResult:
-    """Result of comparing SCP and Rego behavior"""
+    """Result of comparing SCP and Rego behavior."""
     test_case: TestCase
     scp_decision: Decision
     rego_decision: Decision
@@ -88,7 +94,7 @@ class ComparisonResult:
 
 @dataclass
 class ValidationReport:
-    """Complete validation report for a policy"""
+    """Complete validation report for a policy."""
     policy_name: str
     syntax_check: SyntaxCheckResult = field(default_factory=lambda: SyntaxCheckResult(valid=False))
     comparison_results: List[ComparisonResult] = field(default_factory=list)
@@ -98,26 +104,23 @@ class ValidationReport:
     match_rate: float = 0.0
     
     def generate_summary(self) -> str:
-        """Generate a human-readable summary"""
+        """Generate a human-readable summary."""
         summary = []
         summary.append(f"\n{'='*60}")
         summary.append(f"Validation Report: {self.policy_name}")
         summary.append(f"{'='*60}")
         
-        # Syntax check
         summary.append(f"\n[Syntax Check]")
         summary.append(f"Valid: {'✓' if self.syntax_check.valid else '✗'}")
         if not self.syntax_check.valid:
             summary.append(f"Error: {self.syntax_check.error_message}")
         
-        # Behavioral comparison
         summary.append(f"\n[Behavioral Comparison]")
         summary.append(f"Total Tests: {self.total_tests}")
         summary.append(f"Passed: {self.passed_tests} ✓")
         summary.append(f"Failed: {self.failed_tests} ✗")
         summary.append(f"Match Rate: {self.match_rate:.1%}")
         
-        # Failed test details
         if self.failed_tests > 0:
             summary.append(f"\n[Failed Tests]")
             for result in self.comparison_results:
@@ -134,11 +137,11 @@ class ValidationReport:
 
 
 class TestCaseGenerator:
-    """Generates test cases from SCP policies"""
+    """Generates test cases from SCP policies."""
     
     @staticmethod
     def normalize_to_list(value: Any) -> List[str]:
-        """Normalize a value to a list of strings"""
+        """Normalize a value to a list of strings."""
         if isinstance(value, str):
             return [value]
         elif isinstance(value, list):
@@ -146,7 +149,15 @@ class TestCaseGenerator:
         return []
     
     def generate_from_scp(self, scp_json: Dict[str, Any]) -> List[TestCase]:
-        """Generate comprehensive test cases from an SCP policy"""
+        """
+        Generate comprehensive test cases from an SCP policy.
+        
+        Args:
+            scp_json: SCP policy document
+            
+        Returns:
+            List of test cases
+        """
         test_cases = []
         
         statements = scp_json.get('Statement', [])
@@ -156,7 +167,6 @@ class TestCaseGenerator:
         for idx, statement in enumerate(statements):
             effect = Effect(statement.get('Effect', 'Deny'))
             
-            # Handle Action/NotAction
             has_action = 'Action' in statement
             has_not_action = 'NotAction' in statement
             
@@ -164,12 +174,10 @@ class TestCaseGenerator:
                 actions = self.normalize_to_list(statement['Action'])
             elif has_not_action:
                 not_actions = self.normalize_to_list(statement['NotAction'])
-                # For test generation, pick some actions NOT in the list
-                actions = []  # Will generate specific tests for NotAction
+                actions = []
             else:
-                actions = ['*']  # No Action specified = all actions
+                actions = ['*']
             
-            # Handle Resource/NotResource
             has_resource = 'Resource' in statement
             has_not_resource = 'NotResource' in statement
             
@@ -177,36 +185,31 @@ class TestCaseGenerator:
                 resources = self.normalize_to_list(statement['Resource'])
             elif has_not_resource:
                 not_resources = self.normalize_to_list(statement['NotResource'])
-                resources = []  # Will generate specific tests for NotResource
+                resources = []
             else:
-                resources = ['*']  # No Resource specified = all resources
+                resources = ['*']
             
             conditions = statement.get('Condition', {})
             
-            # Generate positive test cases (should match the policy)
             if has_action or (not has_action and not has_not_action):
                 test_cases.extend(self._generate_positive_cases(
                     idx, effect, actions, resources, conditions
                 ))
             
-            # Generate NotAction test cases
             if has_not_action:
                 test_cases.extend(self._generate_not_action_cases(
                     idx, effect, not_actions, resources, conditions
                 ))
             
-            # Generate NotResource test cases
             if has_not_resource:
                 test_cases.extend(self._generate_not_resource_cases(
                     idx, effect, actions if has_action else ['*'], not_resources, conditions
                 ))
             
-            # Generate negative test cases (should not match the policy)
             test_cases.extend(self._generate_negative_cases(
-                idx, effect, actions, resources
+                idx, effect, actions, resources, has_action, has_resource
             ))
             
-            # Generate condition test cases
             if conditions:
                 test_cases.extend(self._generate_condition_cases(
                     idx, effect, actions if has_action else ['*'], resources, conditions
@@ -222,10 +225,9 @@ class TestCaseGenerator:
         resources: List[str],
         conditions: Dict[str, Any]
     ) -> List[TestCase]:
-        """Generate test cases that should match the policy"""
+        """Generate test cases that should match the policy."""
         cases = []
         
-        # Use first action and resource as representative
         if actions and resources:
             action = actions[0] if not actions[0].endswith('*') else self._expand_wildcard_action(actions[0])
             resource = resources[0] if not resources[0].endswith('*') else self._expand_wildcard_resource(resources[0])
@@ -237,7 +239,6 @@ class TestCaseGenerator:
                 description=f"Statement {stmt_idx}: Positive case - should match policy"
             ))
         
-        # Handle wildcard actions
         if '*' in actions:
             cases.append(TestCase(
                 action="s3:GetObject",
@@ -246,11 +247,10 @@ class TestCaseGenerator:
                 description=f"Statement {stmt_idx}: Wildcard action test"
             ))
         
-        # Handle wildcard resources
         if '*' in resources:
             cases.append(TestCase(
                 action=actions[0] if actions else "s3:GetObject",
-                resource="arn:aws:s3:::any-bucket/*",
+                resource="arn:aws:s3:::example-bucket/*",
                 expected_effect=effect,
                 description=f"Statement {stmt_idx}: Wildcard resource test"
             ))
@@ -265,11 +265,13 @@ class TestCaseGenerator:
         resources: List[str],
         conditions: Dict[str, Any]
     ) -> List[TestCase]:
-        """Generate test cases for NotAction"""
+        """
+        Generate test cases for NotAction.
+        
+        NotAction means the statement applies to actions NOT in the list.
+        """
         cases = []
         
-        # Test case: action NOT in NotAction list (should match)
-        # Pick an action likely not in the list
         test_action = "ec2:DescribeInstances"
         if test_action not in not_actions and not any(self._matches_pattern(test_action, na) for na in not_actions):
             cases.append(TestCase(
@@ -279,13 +281,11 @@ class TestCaseGenerator:
                 description=f"Statement {stmt_idx}: NotAction case - action not in exclusion list"
             ))
         
-        # Test case: action in NotAction list (should NOT match)
-        opposite_effect = Effect.ALLOW if effect == Effect.DENY else Effect.DENY
         if not_actions:
             cases.append(TestCase(
                 action=not_actions[0],
                 resource=resources[0] if resources else "*",
-                expected_effect=opposite_effect,
+                expected_effect=Effect.DENY,
                 description=f"Statement {stmt_idx}: NotAction case - action in exclusion list"
             ))
         
@@ -299,11 +299,13 @@ class TestCaseGenerator:
         not_resources: List[str],
         conditions: Dict[str, Any]
     ) -> List[TestCase]:
-        """Generate test cases for NotResource"""
+        """
+        Generate test cases for NotResource.
+        
+        NotResource means the statement applies to resources NOT in the list.
+        """
         cases = []
         
-        # Test case: resource NOT in NotResource list (should match)
-        # Pick a resource likely not in the list
         test_resource = "arn:aws:s3:::test-bucket/*"
         if test_resource not in not_resources and not any(self._matches_pattern(test_resource, nr) for nr in not_resources):
             cases.append(TestCase(
@@ -313,13 +315,11 @@ class TestCaseGenerator:
                 description=f"Statement {stmt_idx}: NotResource case - resource not in exclusion list"
             ))
         
-        # Test case: resource in NotResource list (should NOT match)
-        opposite_effect = Effect.ALLOW if effect == Effect.DENY else Effect.DENY
         if not_resources:
             cases.append(TestCase(
                 action=actions[0] if actions and actions[0] != '*' else "s3:GetObject",
                 resource=not_resources[0],
-                expected_effect=opposite_effect,
+                expected_effect=Effect.DENY,
                 description=f"Statement {stmt_idx}: NotResource case - resource in exclusion list"
             ))
         
@@ -330,33 +330,33 @@ class TestCaseGenerator:
         stmt_idx: int,
         effect: Effect,
         actions: List[str],
-        resources: List[str]
+        resources: List[str],
+        has_action: bool,
+        has_resource: bool
     ) -> List[TestCase]:
-        """Generate test cases that should NOT match the policy"""
+        """Generate test cases that should NOT match the policy."""
         cases = []
+        expected_effect = Effect.DENY
         
-        if effect == Effect.DENY:
-            return []
+        if has_action and actions and '*' not in actions:
+            test_action = "ec2:TerminateInstances"
+            if not any(self._matches_pattern(test_action, a) for a in actions):
+                cases.append(TestCase(
+                    action=test_action,
+                    resource=resources[0] if resources else "*",
+                    expected_effect=expected_effect,
+                    description=f"Statement {stmt_idx}: Negative case - different action"
+                ))
         
-        opposite_effect = Effect.DENY
-        
-        # Different action (only if not wildcard)
-        if actions and not '*' in actions:
-            cases.append(TestCase(
-                action="ec2:TerminateInstances",
-                resource=resources[0] if resources else "*",
-                expected_effect=opposite_effect,
-                description=f"Statement {stmt_idx}: Negative case - different action"
-            ))
-        
-        # Different resource (only if not wildcard)
-        if resources and not '*' in resources:
-            cases.append(TestCase(
-                action=actions[0] if actions else "s3:GetObject",
-                resource="arn:aws:s3:::unrelated-bucket/*",
-                expected_effect=opposite_effect,
-                description=f"Statement {stmt_idx}: Negative case - different resource"
-            ))
+        if has_resource and resources and '*' not in resources:
+            test_resource = "arn:aws:s3:::unrelated-bucket/*"
+            if not any(self._matches_pattern(test_resource, r) for r in resources):
+                cases.append(TestCase(
+                    action=actions[0] if actions else "s3:GetObject",
+                    resource=test_resource,
+                    expected_effect=expected_effect,
+                    description=f"Statement {stmt_idx}: Negative case - different resource"
+                ))
         
         return cases
     
@@ -368,13 +368,11 @@ class TestCaseGenerator:
         resources: List[str],
         conditions: Dict[str, Any]
     ) -> List[TestCase]:
-        """Generate test cases for condition evaluation"""
+        """Generate test cases for condition evaluation."""
         cases = []
         
-        # Extract condition keys and values
         for condition_type, condition_block in conditions.items():
             for condition_key, condition_values in condition_block.items():
-                # Test case that satisfies the condition
                 if isinstance(condition_values, list):
                     context = {condition_key: condition_values[0]}
                 else:
@@ -388,43 +386,68 @@ class TestCaseGenerator:
                     description=f"Statement {stmt_idx}: Condition satisfied - {condition_type}:{condition_key}"
                 ))
                 
-                # Test case that does NOT satisfy the condition
-                opposite_effect = Effect.ALLOW if effect == Effect.DENY else Effect.DENY
                 cases.append(TestCase(
                     action=actions[0] if actions and actions[0] != '*' else "s3:GetObject",
                     resource=resources[0] if resources else "*",
                     context={condition_key: "wrong-value-12345"},
-                    expected_effect=opposite_effect,
+                    expected_effect=Effect.DENY,
                     description=f"Statement {stmt_idx}: Condition not satisfied - {condition_type}:{condition_key}"
                 ))
         
         return cases
     
     def _expand_wildcard_action(self, action: str) -> str:
-        """Convert wildcard action to a concrete example"""
+        """Convert wildcard action to a concrete example."""
+        if action == "*":
+            return "s3:GetObject"
+        
         if action.endswith('*'):
             prefix = action[:-1]
-            return f"{prefix}GetObject"
+            if prefix == "s3:":
+                return "s3:GetObject"
+            elif prefix == "ec2:":
+                return "ec2:DescribeInstances"
+            elif prefix == "iam:":
+                return "iam:GetUser"
+            elif prefix == "dynamodb:":
+                return "dynamodb:GetItem"
+            else:
+                return f"{prefix}List"
+        
         return action
     
     def _expand_wildcard_resource(self, resource: str) -> str:
-        """Convert wildcard resource to a concrete example"""
+        """Convert wildcard resource to a concrete example."""
         if resource == "*":
-            return "arn:aws:s3:::example-bucket/*"
+            return "arn:aws:s3:::example-bucket/example.txt"
+        
+        if resource.endswith("/*"):
+            return resource[:-1] + "example.txt"
+        
         return resource
     
     def _matches_pattern(self, value: str, pattern: str) -> bool:
-        """Check if value matches pattern (supports wildcards)"""
+        """
+        Check if value matches pattern (supports wildcards).
+        
+        AWS wildcard matching: * matches any characters including /.
+        
+        Args:
+            value: Value to check
+            pattern: Pattern with optional wildcards
+            
+        Returns:
+            True if value matches pattern
+        """
         if pattern == '*':
             return True
-        import re
-        regex = '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
         
-        return re.match(regex, value) is not None
+        regex_pattern = re.escape(pattern).replace(r'\*', r'.*')
+        return re.match(f'^{regex_pattern}$', value) is not None
 
 
 class OPARunner:
-    """Handles OPA CLI interactions"""
+    """Handles OPA CLI interactions."""
     
     def __init__(self, 
                  opa_path: str = "opa",
@@ -444,7 +467,7 @@ class OPARunner:
         self._check_opa_available()
     
     def _check_opa_available(self):
-        """Check if OPA is available"""
+        """Check if OPA is available."""
         try:
             result = subprocess.run(
                 [self.opa_path, "version"],
@@ -460,10 +483,17 @@ class OPARunner:
             raise RuntimeError(f"Error checking OPA availability: {e}")
     
     def check_syntax(self, rego_code: str) -> SyntaxCheckResult:
-        """Validate Rego syntax using 'opa check'"""
+        """
+        Validate Rego syntax using 'opa check'.
+        
+        Args:
+            rego_code: Rego policy code to validate
+            
+        Returns:
+            Syntax check result
+        """
         temp_file = None
         try:
-            # Create temporary file (cross-platform)
             with tempfile.NamedTemporaryFile(mode='w', suffix='.rego', delete=False) as f:
                 temp_file = f.name
                 f.write(rego_code)
@@ -490,12 +520,11 @@ class OPARunner:
             )
         
         finally:
-            # Clean up temporary file
             if temp_file and os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
                 except Exception:
-                    pass  # Best effort cleanup
+                    pass
     
     def evaluate(self, 
                  rego_code: str, 
@@ -523,7 +552,6 @@ class OPARunner:
         temp_input = None
         
         try:
-            # Create temporary files (cross-platform)
             with tempfile.NamedTemporaryFile(mode='w', suffix='.rego', delete=False) as f:
                 temp_policy = f.name
                 f.write(rego_code)
@@ -532,7 +560,6 @@ class OPARunner:
                 temp_input = f.name
                 json.dump(input_data, f)
             
-            # Run opa eval
             result = subprocess.run(
                 [self.opa_path, "eval",
                  "-d", temp_policy,
@@ -547,17 +574,14 @@ class OPARunner:
             if result.returncode != 0:
                 return Decision.ERROR
             
-            # Parse OPA output
             output = json.loads(result.stdout)
             
-            # Extract value from OPA result
             value = None
             if output.get("result"):
                 expressions = output["result"][0].get("expressions", [])
                 if expressions:
                     value = expressions[0].get("value")
             
-            # Interpret based on result_type
             return self._interpret_result(value, result_type)
         
         except Exception as e:
@@ -565,13 +589,12 @@ class OPARunner:
             return Decision.ERROR
         
         finally:
-            # Clean up temporary files
             for temp_file in [temp_policy, temp_input]:
                 if temp_file and os.path.exists(temp_file):
                     try:
                         os.remove(temp_file)
                     except Exception:
-                        pass  # Best effort cleanup
+                        pass
     
     def _interpret_result(self, value: Any, result_type: RegoResultType) -> Decision:
         """
@@ -585,26 +608,19 @@ class OPARunner:
             Decision based on interpretation
         """
         if result_type == RegoResultType.DENY_SET:
-            # Non-empty set/list/dict = Deny, empty/None = Allow
             if value is None:
                 return Decision.ALLOW
             
-            if isinstance(value, list):
+            if isinstance(value, (list, dict)):
                 return Decision.DENY if len(value) > 0 else Decision.ALLOW
-            elif isinstance(value, dict):
-                return Decision.DENY if len(value) > 0 else Decision.ALLOW
-            elif isinstance(value, set):
-                return Decision.DENY if len(value) > 0 else Decision.ALLOW
-            else:
-                # Scalar value (like a string message) = Deny
-                return Decision.DENY if value else Decision.ALLOW
+            
+            print(f"WARNING: DENY_SET mode expects list/dict, got {type(value).__name__}: {value}")
+            return Decision.ERROR
         
         elif result_type == RegoResultType.ALLOW_BOOL:
-            # true = Allow, false/None = Deny
             return Decision.ALLOW if value is True else Decision.DENY
         
         elif result_type == RegoResultType.DENY_BOOL:
-            # true = Deny, false/None = Allow
             return Decision.DENY if value is True else Decision.ALLOW
         
         else:
@@ -615,17 +631,13 @@ class SCPEvaluator:
     """
     Evaluates SCP policies to determine their decision.
     
-    FIXED IMPLEMENTATION:
-    - SCP acts as a permission boundary (implicit Deny by default)
-    - Explicit Deny has highest priority
-    - Explicit Allow needed to override implicit Deny
-    - Action/NotAction and Resource/NotResource are mutually exclusive
-    - Missing Action/Resource = wildcard "*"
+    SCP acts as a permission boundary with implicit Deny by default.
+    Explicit Deny has highest priority over Allow.
     """
     
     @staticmethod
     def normalize_to_list(value: Any) -> List[str]:
-        """Normalize a value to a list of strings"""
+        """Normalize a value to a list of strings."""
         if isinstance(value, str):
             return [value]
         elif isinstance(value, list):
@@ -636,10 +648,10 @@ class SCPEvaluator:
         """
         Evaluate an SCP policy for a given test case.
         
-        SCP Evaluation Logic (FIXED):
-        1. First pass: Check for explicit Deny - any match = immediate Deny
-        2. Second pass: Check for explicit Allow - any match = Allow
-        3. No explicit Allow match = implicit Deny (SCP as boundary)
+        SCP Evaluation Logic:
+        1. Check for explicit Deny - any match returns Deny immediately
+        2. Check for explicit Allow - any match returns Allow
+        3. No explicit Allow = implicit Deny (SCP as boundary)
         
         Args:
             scp_json: SCP policy document
@@ -652,19 +664,19 @@ class SCPEvaluator:
         if not isinstance(statements, list):
             statements = [statements]
         
-        # First pass: Check for explicit Deny (highest priority)
+        # Pass 1: Check for explicit Deny (highest priority)
         for statement in statements:
             try:
                 if self._statement_matches(statement, test_case):
                     effect = statement.get('Effect', 'Deny')
                     if effect == 'Deny':
-                        return Decision.DENY  # Immediate return - Deny wins
+                        return Decision.DENY
             except ValueError as e:
-                # Statement validation error (e.g., both Action and NotAction)
-                print(f"Warning: Invalid statement: {e}")
+                print(f"ERROR: Invalid statement in policy: {e}")
+                print(f"  Statement: {json.dumps(statement, indent=2)}")
                 continue
         
-        # Second pass: Check for explicit Allow
+        # Pass 2: Check for explicit Allow
         has_explicit_allow = False
         for statement in statements:
             try:
@@ -676,37 +688,30 @@ class SCPEvaluator:
             except ValueError as e:
                 continue
         
-        # SCP semantic: No explicit Allow = implicit Deny (permission boundary)
         return Decision.ALLOW if has_explicit_allow else Decision.DENY
     
     def _statement_matches(self, statement: Dict[str, Any], test_case: TestCase) -> bool:
         """
         Check if a statement matches the test case.
         
-        FIXED IMPLEMENTATION:
-        - Validates Action/NotAction mutual exclusivity
-        - Validates Resource/NotResource mutual exclusivity
-        - Handles missing fields as wildcard "*"
-        
         Args:
             statement: SCP statement
             test_case: Test case to match against
         
         Returns:
-            True if statement matches, False otherwise
+            True if statement matches
         
         Raises:
-            ValueError: If statement has both Action and NotAction, or both Resource and NotResource
+            ValueError: If statement has both Action and NotAction, 
+                       or both Resource and NotResource
         """
-        # === ACTION/NOTACTION VALIDATION AND MATCHING ===
+        # Action/NotAction validation and matching
         has_action = 'Action' in statement
         has_not_action = 'NotAction' in statement
         
-        # Validate mutual exclusivity
         if has_action and has_not_action:
             raise ValueError("Statement cannot have both Action and NotAction")
         
-        # Check Action matching
         if has_action:
             actions = self.normalize_to_list(statement['Action'])
             action_matches = any(
@@ -714,27 +719,20 @@ class SCPEvaluator:
                 for action in actions
             )
             if not action_matches:
-                return False  # Action specified but didn't match
+                return False
         
         elif has_not_action:
-            # NotAction: matches if action is NOT in the NotAction list
             not_actions = self.normalize_to_list(statement['NotAction'])
-            # If action IS in NotAction list, statement doesn't match
             if any(self._matches_pattern(test_case.action, action) for action in not_actions):
                 return False
-            # If action is NOT in NotAction list, continue checking other fields
         
-        # else: No Action/NotAction specified = matches all actions (equivalent to "*")
-        
-        # === RESOURCE/NOTRESOURCE VALIDATION AND MATCHING ===
+        # Resource/NotResource validation and matching
         has_resource = 'Resource' in statement
         has_not_resource = 'NotResource' in statement
         
-        # Validate mutual exclusivity
         if has_resource and has_not_resource:
             raise ValueError("Statement cannot have both Resource and NotResource")
         
-        # Check Resource matching
         if has_resource:
             resources = self.normalize_to_list(statement['Resource'])
             resource_matches = any(
@@ -742,34 +740,30 @@ class SCPEvaluator:
                 for resource in resources
             )
             if not resource_matches:
-                return False  # Resource specified but didn't match
+                return False
         
         elif has_not_resource:
-            # NotResource: matches if resource is NOT in the NotResource list
             not_resources = self.normalize_to_list(statement['NotResource'])
-            # If resource IS in NotResource list, statement doesn't match
             if any(self._matches_pattern(test_case.resource, resource) for resource in not_resources):
                 return False
-            # If resource is NOT in NotResource list, continue checking other fields
         
-        # else: No Resource/NotResource specified = matches all resources (equivalent to "*")
-        
-        # === CONDITION EVALUATION ===
+        # Condition evaluation
         conditions = statement.get('Condition', {})
         if conditions:
             if not self._evaluate_conditions(conditions, test_case.context):
                 return False
         
-        # All checks passed - statement matches
         return True
     
     def _matches_pattern(self, value: str, pattern: str) -> bool:
         """
         Check if value matches pattern (supports wildcards).
         
+        AWS wildcard matching: * matches any characters including /.
+        
         Args:
-            value: Value to check (e.g., "s3:GetObject")
-            pattern: Pattern to match against (e.g., "s3:*", "*", "s3:GetObject")
+            value: Value to check
+            pattern: Pattern with optional wildcards
         
         Returns:
             True if value matches pattern
@@ -777,9 +771,8 @@ class SCPEvaluator:
         if pattern == '*':
             return True
         
-        import re
-        regex = '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
-        return re.match(regex, value) is not None
+        regex_pattern = re.escape(pattern).replace(r'\*', r'.*')
+        return re.match(f'^{regex_pattern}$', value) is not None
     
     def _evaluate_conditions(self, conditions: Dict[str, Any], context: Dict[str, Any]) -> bool:
         """
@@ -797,7 +790,7 @@ class SCPEvaluator:
                 context_value = context.get(condition_key)
                 
                 # Normalize condition values to list
-                if isinstance(condition_values, str):
+                if not isinstance(condition_values, list):
                     condition_values = [condition_values]
                 
                 # Evaluate based on condition type
@@ -810,7 +803,6 @@ class SCPEvaluator:
                         return False
                 
                 elif condition_type == "StringLike":
-                    # Simple wildcard matching
                     if not any(self._matches_pattern(str(context_value), str(cv)) for cv in condition_values):
                         return False
                 
@@ -819,7 +811,6 @@ class SCPEvaluator:
                         return False
                 
                 elif condition_type.startswith("Numeric"):
-                    # Numeric conditions (simplified)
                     try:
                         ctx_num = float(context_value) if context_value is not None else None
                         cond_nums = [float(cv) for cv in condition_values]
@@ -837,19 +828,16 @@ class SCPEvaluator:
                         return False
                 
                 elif condition_type == "Bool":
-                    # Boolean condition
                     bool_value = str(context_value).lower() == "true"
                     expected = str(condition_values[0]).lower() == "true"
                     if bool_value != expected:
                         return False
-                
-                # Add more condition types as needed (Date, IpAddress, etc.)
         
         return True
 
 
 class SCPValidator:
-    """Main validator class for SCP -> Rego validation"""
+    """Main validator class for SCP to Rego validation."""
     
     def __init__(self, 
                  scp_dir: str = "src/policies/json",
@@ -864,7 +852,7 @@ class SCPValidator:
             scp_dir: Directory containing original SCP JSON files
             rego_dir: Directory containing translated Rego policies
             opa_path: Path to OPA executable
-            rego_query: OPA query to execute (e.g., "data.aws.scp.deny")
+            rego_query: OPA query to execute
             rego_result_type: How to interpret Rego results
         """
         self.scp_dir = Path(scp_dir)
@@ -893,18 +881,14 @@ class SCPValidator:
             
         try:
             if isinstance(scp_json, dict):
-                # Case 1: Full AWS describe-policy shape
                 if "Policy" in scp_json and isinstance(scp_json["Policy"], dict):
                     content = scp_json["Policy"].get("Content")
                     if isinstance(content, str):
-                        # Content is a JSON string -> parse it
                         scp_json = json.loads(content)
-                # Case 2: Some tools save {"Content": "<json string>"} directly
                 elif "Content" in scp_json and isinstance(scp_json["Content"], str):
                     scp_json = json.loads(scp_json["Content"])
-        except Exception as _:
-            # If unwrap fails, keep original; later logic will surface helpful errors
-            pass
+        except Exception as e:
+            print(f"Warning: Error unwrapping policy content: {e}")
         
         # Load Rego policy
         rego_path = self.rego_dir / f"{policy_name}.rego"
@@ -914,10 +898,9 @@ class SCPValidator:
         with open(rego_path, 'r') as f:
             rego_code = f.read()
         
-        # Create report
         report = ValidationReport(policy_name=policy_name)
         
-        # 1. Syntax check
+        # Syntax check
         print(f"[1/3] Checking Rego syntax for {policy_name}...")
         report.syntax_check = self.opa_runner.check_syntax(rego_code)
         
@@ -926,13 +909,13 @@ class SCPValidator:
             return report
         print(f"  ✓ Syntax check passed")
         
-        # 2. Generate test cases
+        # Generate test cases
         print(f"[2/3] Generating test cases from SCP...")
         test_cases = self.test_generator.generate_from_scp(scp_json)
         report.total_tests = len(test_cases)
         print(f"  Generated {len(test_cases)} test cases")
         
-        # 3. Compare behaviors
+        # Compare behaviors
         print(f"[3/3] Comparing SCP and Rego behaviors...")
         for test_case in test_cases:
             scp_decision = self.scp_evaluator.evaluate(scp_json, test_case)
@@ -958,7 +941,6 @@ class SCPValidator:
             else:
                 report.failed_tests += 1
         
-        # Calculate match rate
         if report.total_tests > 0:
             report.match_rate = report.passed_tests / report.total_tests
         
@@ -967,10 +949,9 @@ class SCPValidator:
         return report
     
     def validate_all_policies(self) -> List[ValidationReport]:
-        """Validate all policies in the directories"""
+        """Validate all policies in the directories."""
         reports = []
         
-        # Find all SCP JSON files
         scp_files = list(self.scp_dir.glob("*.json"))
         
         print(f"\nFound {len(scp_files)} SCP policies to validate")
@@ -996,7 +977,7 @@ class SCPValidator:
         return reports
     
     def generate_summary_report(self, reports: List[ValidationReport]) -> str:
-        """Generate an overall summary of all validation reports"""
+        """Generate an overall summary of all validation reports."""
         summary = []
         summary.append("\n" + "="*60)
         summary.append("OVERALL VALIDATION SUMMARY")
@@ -1031,7 +1012,7 @@ class SCPValidator:
 
 
 def main():
-    """Main entry point for validation"""
+    """Main entry point for validation."""
     import argparse
     
     parser = argparse.ArgumentParser(description="Validate SCP to Rego translations")
@@ -1079,7 +1060,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Convert result type string to enum
     result_type_map = {
         "deny_set": RegoResultType.DENY_SET,
         "allow_bool": RegoResultType.ALLOW_BOOL,
@@ -1099,31 +1079,26 @@ def main():
         has_failures = False
         
         if args.policy:
-            # Validate single policy
             report = validator.validate_policy(args.policy)
             print(report.generate_summary())
             
-            # Check for failures
             if not report.syntax_check.valid or report.failed_tests > 0:
                 has_failures = True
         else:
-            # Validate all policies
             reports = validator.validate_all_policies()
             print(validator.generate_summary_report(reports))
             
-            # Check for failures in any report
             for report in reports:
                 if not report.syntax_check.valid or report.failed_tests > 0:
                     has_failures = True
                     break
         
-        # Return appropriate exit code for CI
         if has_failures:
             if args.fail_on_mismatch:
-                print("\n Validation failures detected - exiting with code 1")
+                print("\n⚠ Validation failures detected - exiting with code 1")
                 return 1
             else:
-                print("\n Validation failures detected (use --fail-on-mismatch to fail CI)")
+                print("\n⚠ Validation failures detected (use --fail-on-mismatch to fail CI)")
                 return 0
         else:
             print("\n✓ All validations passed!")
