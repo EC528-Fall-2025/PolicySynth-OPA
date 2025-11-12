@@ -58,3 +58,27 @@ class S3Handler:
         except Exception as e:
             logger.error(f"Unexpected error downloading {key} from S3: {e}", exc_info=True)
             raise
+
+    def upload_file(self, local_path: str, key: str, content_type: str = None, sse: str = "AES256"):
+        """
+        Uploads any local file to S3 with optional content-type and server-side encryption.
+
+        """
+        extra = {}
+        if content_type:
+            extra["ContentType"] = content_type
+        if sse:
+            extra["ServerSideEncryption"] = sse
+
+        try:
+            self.s3.upload_file(
+                Filename=str(local_path),
+                Bucket=self.bucket_name,
+                Key=key,
+                ExtraArgs=extra,
+            )
+            logger.info("Successfully uploaded file to %s/%s", self.bucket_name, key)
+            return True
+        except ClientError as e:
+            logger.exception("Failed to upload file %s to %s/%s: %s", local_path, self.bucket_name, key, e)
+            raise
