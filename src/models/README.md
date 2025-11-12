@@ -38,6 +38,8 @@ When running with the --policy argument, the validator loads exactly one pair of
 
 Other .json or .rego files in the same directory are ignored.
 
+-------
+
 ### Examples
 
 #### Boolean allow policy
@@ -64,3 +66,12 @@ python -m src.models.scp_validation \
   --rego-dir src/tests/opa_test/scp/deny \
   --rego-query data.aws.scp.deny \
   --rego-result-type deny_set
+
+
+### Wrong(Not match)
+python -m src.models.scp_validation  \
+ --policy example_scp_getobject_only   \
+ --scp-dir src/tests/opa_test/scp/wrong   \
+ --rego-dir src/tests/opa_test/scp/wrong   \
+ --rego-query data.aws.scp.allow   \
+ --rego-result-type allow_bool
