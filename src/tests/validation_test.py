@@ -501,7 +501,7 @@ class TestRegoResultTypes(unittest.TestCase):
         
         self.assertEqual(
             runner._interpret_result(None, RegoResultType.ALLOW_BOOL),
-            Decision.DENY
+            Decision.ERROR
         )
     
     def test_deny_bool_true_is_deny(self):
@@ -520,7 +520,7 @@ class TestRegoResultTypes(unittest.TestCase):
         
         self.assertEqual(
             runner._interpret_result(None, RegoResultType.DENY_BOOL),
-            Decision.ALLOW
+            Decision.ERROR
         )
 
 
