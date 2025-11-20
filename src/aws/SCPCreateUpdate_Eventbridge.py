@@ -25,16 +25,16 @@ class SCPEventBridgeHandler:
 
         self.events_client = boto3.client(
             'events',
-            region_name=self.config.get('region', 'us-east-1')
+            region_name=self.config.get('region', 'us-east-2')
         )
 
         self.stepfunctions_client = boto3.client(
             'stepfunctions',
-            region_name=self.config.get('region', 'us-east-1')
+            region_name=self.config.get('region', 'us-east-2')
         )
         self.lambda_client = boto3.client(
             'lambda',
-            region_name=self.config.get('region', 'us-east-1')
+            region_name=self.config.get('region', 'us-east-2')
         )
 
     def create_event_rule(self, rule_name: str = "SCPCreateUpdateRule") -> dict | None:
@@ -115,7 +115,12 @@ class SCPEventBridgeHandler:
                             },
                             {
                                 "Variable": "$.detail.eventName",
-                                "StringMatches": ["CreatePolicy", "UpdatePolicy"],
+                                "StringEquals": "CreatePolicy",
+                                "Next": "Fetch and Translate SCP"
+                            },
+                            {
+                                "Variable": "$.detail.eventName",
+                                "StringEquals": "UpdatePolicy",
                                 "Next": "Fetch and Translate SCP"
                             }
                         ],
@@ -196,7 +201,7 @@ class SCPEventBridgeHandler:
                 # Get existing state machine ARN
                 try:
                     existing_sm = self.stepfunctions_client.describe_state_machine(
-                        stateMachineArn=f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{boto3.client('sts').get_caller_identity()['Account']}:stateMachine:{state_machine_name}"
+                        stateMachineArn=f"arn:aws:states:{self.config.get('region', 'us-east-2')}:{boto3.client('sts').get_caller_identity()['Account']}:stateMachine:{state_machine_name}"
                     )
                     return {'stateMachineArn': existing_sm['stateMachineArn']}
                 except:
@@ -222,7 +227,7 @@ class SCPEventBridgeHandler:
         try:
             # Get current state machine definition
             account_id = boto3.client('sts').get_caller_identity()['Account']
-            state_machine_arn = f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{account_id}:stateMachine:{state_machine_name}"
+            state_machine_arn = f"arn:aws:states:{self.config.get('region', 'us-east-2')}:{account_id}:stateMachine:{state_machine_name}"
 
             sm_response = self.stepfunctions_client.describe_state_machine(
                 stateMachineArn=state_machine_arn
@@ -262,7 +267,7 @@ class SCPEventBridgeHandler:
             # update our lambdas position (insert_after)
             for _, state_def in current_definition["States"].items():
                 if state_def.get("End") == True:
-                    state_def["End"] = False
+                    del state_def["End"]
                     state_def["Next"] = lambda_name
                     break
 
@@ -299,7 +304,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T10:00:00Z",
-            "region": "us-east-1",
+            "region": "us-east-2",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -312,7 +317,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T10:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "CreatePolicy",
-                "awsRegion": "us-east-1",
+                "awsRegion": "us-east-2",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "name": "TestSCPPolicy",
@@ -330,7 +335,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T11:00:00Z",
-            "region": "us-east-1",
+            "region": "us-east-2",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -343,7 +348,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T11:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "UpdatePolicy",
-                "awsRegion": "us-east-1",
+                "awsRegion": "us-east-2",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "policyId": "p-12345678",
@@ -396,7 +401,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T12:00:00Z",
-            "region": "us-east-1",
+            "region": "us-east-2",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -409,7 +414,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T12:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "DeletePolicy",
-                "awsRegion": "us-east-1",
+                "awsRegion": "us-east-2",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "policyId": "p-12345678"
