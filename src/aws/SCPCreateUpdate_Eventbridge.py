@@ -6,6 +6,7 @@ from botocore.exceptions import ClientError, NoCredentialsError, PartialCredenti
 
 class SCPEventBridgeHandler:
     def __init__(self, config: Dict[str, Any]=None, eventbridge_client=None):
+        self.config = config or {}
         try:
             sts_client = boto3.client('sts')
             identity = sts_client.get_caller_identity()
