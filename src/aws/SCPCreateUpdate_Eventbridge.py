@@ -474,9 +474,7 @@ def test_step_function_setup():
         return False
     
     # 2. Create Step Function target (you'll need to provide a valid IAM role ARN)
-    # Replace with your actual IAM role ARN for Step Functions
-    role_arn = "arn:aws:iam::135167709822:user/aamaya3"
-    
+    role_arn = "arn:aws:iam::135167709822:role/StepFunction-SCPProcessing" 
     print("Creating Step Function state machine...")
     sf_result = handler.create_step_function_target(
         rule_name="SCPCreateUpdateRule",
