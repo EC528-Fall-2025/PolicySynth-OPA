@@ -35,22 +35,40 @@ class SCPEventBridgeHandler:
 
     def create_event_rule(self, rule_name: str = "SCPCreateUpdateRule") -> dict | None:
         '''Creates an EventBridge rule to capture SCP create and update events.'''
-        event_pattern = {
-            "source": ["aws.organizations"],
-            "detail-type": ["AWS API Call via CloudTrail"],
-            "detail": {
-                "eventName": ["CreatePolicy", "UpdatePolicy"],
+        if rule_name == "SCPDeleteRule":
+            event_pattern = {
+                "source": ["aws.organizations"],
+                "detail-type": ["AWS API Call via CloudTrail"],
+                "detail": {
+                    "eventName": ["DeletePolicy"],
+                }
             }
-        }
+        else:
+            event_pattern = {
+                "source": ["aws.organizations"],
+                "detail-type": ["AWS API Call via CloudTrail"],
+                "detail": {
+                    "eventName": ["CreatePolicy", "UpdatePolicy"],
+                }
+            }
 
         try:
-            response = self.events_client.put_rule(
-                Name=rule_name,
-                EventPattern=json.dumps(event_pattern),
-                State='ENABLED',
-                Description='Trigger when SCP policies are created or updated'
-            )
+            if rule_name == "SCPDeleteRule":
+                response = self.events_client.put_rule(
+                    Name=rule_name,
+                    EventPattern=json.dumps(event_pattern),
+                    State='ENABLED',
+                    Description='Trigger when SCP policies are deleted'
+                )
+            else:
+                response = self.events_client.put_rule(
+                    Name=rule_name,
+                    EventPattern=json.dumps(event_pattern),
+                    State='ENABLED',
+                    Description='Trigger when SCP policies are created or updated'
+                )
             return response
+
         except ClientError as e:
             error_code = e.response['Error']['Code']
             if error_code == 'InvalidSignatureException':
@@ -69,7 +87,7 @@ class SCPEventBridgeHandler:
             print(f"Unexpected error creating EventBridge rule: {str(e)}")
             return None
 
-    def test_event_pattern(self, rule_name: str = "SCPCreateUpdateRule") -> bool:
+    def test_create_update_event_pattern(self, rule_name: str = "SCPCreateUpdateRule") -> bool:
         '''Tests if the EventBridge create/update rule is working'''
 
         test_create_event = {
@@ -136,11 +154,9 @@ class SCPEventBridgeHandler:
 
         # get rule pattern and test
         try:
-            # Get the rule pattern
             rule_response = self.events_client.describe_rule(Name=rule_name)
             event_pattern = rule_response['EventPattern']
 
-            # Test both create and update events
             create_test = self.events_client.test_event_pattern(
                 EventPattern=event_pattern,
                 Event=json.dumps(test_create_event)
@@ -168,7 +184,80 @@ class SCPEventBridgeHandler:
             print(f"Error testing event pattern: {str(e)}")
             return False
 
+    def test_delete_event_pattern(self, rule_name: str = "SCPDeleteRule") -> bool:
+        '''Tests if the EventBridge delete rule is working'''
+
+        test_delete_event = {
+            "version": "0",
+            "id": "11111111-2222-3333-4444-555555555555",
+            "detail-type": "AWS API Call via CloudTrail",
+            "source": "aws.organizations",
+            "account": "123456789012",
+            "time": "2025-11-20T12:00:00Z",
+            "region": "us-east-1",
+            "detail": {
+                "eventVersion": "1.05",
+                "userIdentity": {
+                    "type": "IAMUser",
+                    "principalId": "AIDACKCEVSQ6C2EXAMPLE",
+                    "arn": "arn:aws:iam::123456789012:user/test-user",
+                    "accountId": "123456789012",
+                    "userName": "test-user"
+                },
+                "eventTime": "2025-11-20T12:00:00Z",
+                "eventSource": "organizations.amazonaws.com",
+                "eventName": "DeletePolicy",
+                "awsRegion": "us-east-1",
+                "sourceIPAddress": "192.0.2.1",
+                "requestParameters": {
+                    "policyId": "p-12345678"
+                },
+                "responseElements": {
+                    "policy": {
+                        "policySummary": {
+                            "id": "p-12345678",
+                            "arn": "arn:aws:organizations::123456789012:policy/o-example123456/service_control_policy/p-12345678",
+                            "name": "DeletedSCPPolicy",
+                            "description": "SCP policy being deleted",
+                            "type": "SERVICE_CONTROL_POLICY"
+                        }
+                    }
+                }
+            }
+        }
+
+        # Get rule pattern and test
+        try:
+            rule_response = self.events_client.describe_rule(Name=rule_name)
+            event_pattern = rule_response['EventPattern']
+
+            delete_test = self.events_client.test_event_pattern(
+                EventPattern=event_pattern,
+                Event=json.dumps(test_delete_event)
+            )
+
+            delete_match = delete_test['Result']
+
+            print(f"Delete event test result: {'✓ MATCH' if delete_match else '✗ NO MATCH'}")
+
+            return delete_match
+
+        except Exception as e:
+            if isinstance(e, ClientError):
+                error_code = e.response['Error']['Code']
+                if error_code == 'ResourceNotFoundException':
+                    print(f"EventBridge rule '{rule_name}' not found. Create the rule first.")
+                    return False
+                elif error_code == 'UnrecognizedClientException':
+                    print("The security token included in the request is invalid. "
+                          "Please check your AWS credentials.")
+                    return False
+            print(f"Error testing delete event pattern: {str(e)}")
+            return False
+
 
 test = SCPEventBridgeHandler()
-test.create_event_rule()
-test.test_event_pattern()
+test.create_event_rule("SCPCreateUpdateRule")
+test.create_event_rule("SCPDeleteRule")
+test.test_create_update_event_pattern("SCPCreateUpdateRule")
+test.test_delete_event_pattern("SCPDeleteRule")
