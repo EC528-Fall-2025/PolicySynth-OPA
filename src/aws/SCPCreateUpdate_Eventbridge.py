@@ -5,7 +5,11 @@ from botocore.exceptions import ClientError, NoCredentialsError, PartialCredenti
 
 
 class SCPEventBridgeHandler:
-    def __init__(self, config: Dict[str, Any]=None, eventbridge_client=None):
+    '''
+    If you're cross testing this, you need to make sure that CloudTrail
+    is enabled since eventbridge relies on it to capture AWS API calls.
+    '''
+    def __init__(self, config: Dict[str, Any]=None):
         self.config = config or {}
         try:
             sts_client = boto3.client('sts')
@@ -23,13 +27,13 @@ class SCPEventBridgeHandler:
             'events',
             region_name=self.config.get('region', 'us-east-1')
         )
-        # this will be replaced with step functions
-        self.lambda_client = boto3.client(
-            'lambda',
+
+        self.stepfunctions_client = boto3.client(
+            'stepfunctions',
             region_name=self.config.get('region', 'us-east-1')
         )
-        self.iam_client = boto3.client(
-            'iam',
+        self.lambda_client = boto3.client(
+            'lambda',
             region_name=self.config.get('region', 'us-east-1')
         )
 
@@ -86,6 +90,204 @@ class SCPEventBridgeHandler:
         except Exception as e:
             print(f"Unexpected error creating EventBridge rule: {str(e)}")
             return None
+
+    def create_step_function_target(self,
+                                    rule_name: str,
+                                    state_machine_name: str,
+                                    role_arn: str) -> dict | None:
+        '''
+        Creates a Step Functions state machine and
+        adds it as an EventBridge target.
+        '''
+        try:
+            # resources will need to be changed to actual ARNs
+            state_machine_defintition = {
+                "Comment": "SCP Event Processing State Machine",
+                "StartAt": "Check Event Type",
+                "States": {
+                    "Check Event Type": {
+                        "Type": "Choice",
+                        "Choices": [
+                            {
+                                "Variable": "$.detail.eventName",
+                                "StringEquals": "DeletePolicy",
+                                "Next": "Delete Policy from S3"
+                            },
+                            {
+                                "Variable": "$.detail.eventName",
+                                "StringMatches": ["CreatePolicy", "UpdatePolicy"],
+                                "Next": "Fetch and Translate SCP"
+                            }
+                        ],
+                        "Default": "FailState"
+                    },
+                    "Delete Policy from S3": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:DeleteSCPHandler",
+                        "ResultPath": "$.deleteResult",
+                        "End": True
+                    },
+                    "Fetch and Translate SCP": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:FetchTranslateHandler",
+                        "ResultPath": "$.translationResult",
+                        "Next": "Validate Policy"
+                    },
+                    "Validate Policy": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:ValidationHandler",
+                        "ResultPath": "$.validationResult",
+                        "Next": "Store Policy in S3"
+                    },
+                    "Store Policy in S3": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:StoreSCPHandler",
+                        "ResultPath": "$.storeResult",
+                        "End": True
+                    },
+                    "FailState": {
+                        "Type": "Fail",
+                        "Error": "UnknownEventType",
+                        "Cause": "Received unsupported eventName"
+                    }
+                }
+            }
+
+            response = self.stepfunctions_client.create_state_machine(
+                name=state_machine_name,
+                definition=json.dumps(state_machine_defintition),
+                roleArn=role_arn,  # can't this just be assumed from the user credentials?
+                type='STANDARD'
+            )
+
+            state_machine_arn = response['stateMachineArn']
+            print(f"Created Step Functions state machine: {state_machine_arn}")
+
+            target_response = self.events_client.put_targets(
+                Rule=rule_name,
+                Targets=[
+                    {
+                        'Id': '1',
+                        'Arn': state_machine_arn,
+                        'RoleArn': role_arn,
+                        'InputTransformer': {
+                            'InputPathsMap': {
+                                'eventName': '$.detail.eventName',
+                                'policyContent': '$.detail.requestParameters.content',
+                                'policyId': '$.detail.requestParameters.policyId',
+                                'policyName': '$.detail.requestParameters.name',
+                                'ingestionTime': '$.time'
+                            },
+                            'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>}'
+                        }
+                    }
+                ]
+            )
+
+            return {
+                'stateMachineArn': state_machine_arn,
+                'targetResponse': target_response
+            }
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'StateMachineAlreadyExists':
+                print(f"State machine {state_machine_name} already exists")
+                # Get existing state machine ARN
+                try:
+                    existing_sm = self.stepfunctions_client.describe_state_machine(
+                        stateMachineArn=f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{boto3.client('sts').get_caller_identity()['Account']}:stateMachine:{state_machine_name}"
+                    )
+                    return {'stateMachineArn': existing_sm['stateMachineArn']}
+                except:
+                    pass
+            print(f"Error creating Step Functions target: {error_code} - {e.response['Error']['Message']}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error creating Step Functions target: {str(e)}")
+            return None
+
+    def add_lambda_to_step_function(self,
+                                    state_machine_name: str = "SCPProcessingStateMachine",
+                                    lambda_function_arn: str = None,
+                                    lambda_name: str = None,
+                                    insert_after: str = None) -> bool:
+        '''
+        Adds a Lambda function to the Step Functions state machine processing chain.
+        '''
+        if not lambda_function_arn or not lambda_name:
+            print("Both lambda_function_arn and lambda_name are required")
+            return False
+
+        try:
+            # Get current state machine definition
+            account_id = boto3.client('sts').get_caller_identity()['Account']
+            state_machine_arn = f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{account_id}:stateMachine:{state_machine_name}"
+
+            sm_response = self.stepfunctions_client.describe_state_machine(
+                stateMachineArn=state_machine_arn
+            )
+
+            current_definition = json.loads(sm_response['definition'])
+
+            # Lambda task state
+            lambda_task = {
+                "Type": "Task",
+                "Resource": lambda_function_arn,
+                "Retry": [
+                    {
+                        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 3,
+                        "BackoffRate": 2.0
+                    }
+                ],
+                "Catch": [
+                    {
+                        "ErrorEquals": ["States.TaskFailed"],
+                        "Next": "HandleError",
+                        "ResultPath": "$.error"
+                    }
+                ],
+                "End": True
+            }
+
+            if "HandleError" not in current_definition["States"]:
+                current_definition["States"]["HandleError"] = {
+                    "Type": "Pass",
+                    "Result": "Error occurred in processing",
+                    "End": True
+                }
+
+            # update our lambdas position (insert_after)
+            for _, state_def in current_definition["States"].items():
+                if state_def.get("End") == True:
+                    state_def["End"] = False
+                    state_def["Next"] = lambda_name
+                    break
+
+            # Add the new branch to the parallel state
+            current_definition["States"][lambda_name] = lambda_task
+
+            # Update the state machine
+            update_response = self.stepfunctions_client.update_state_machine(
+                stateMachineArn=state_machine_arn,
+                definition=json.dumps(current_definition)
+            )
+
+            print(f"Successfully added Lambda {lambda_name} to Step Functions state machine: {update_response}")
+            return True
+
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'ResourceNotFound':
+                print(f"State machine {state_machine_name} not found. Create it first using create_step_function_target()")
+            else:
+                print(f"Error adding Lambda to Step Functions: {error_code} - {e.response['Error']['Message']}")
+            return False
+        except Exception as e:
+            print(f"Unexpected error adding Lambda to Step Functions: {str(e)}")
+            return False
 
     def test_create_update_event_pattern(self, rule_name: str = "SCPCreateUpdateRule") -> bool:
         '''Tests if the EventBridge create/update rule is working'''
@@ -254,10 +456,3 @@ class SCPEventBridgeHandler:
                     return False
             print(f"Error testing delete event pattern: {str(e)}")
             return False
-
-
-test = SCPEventBridgeHandler()
-test.create_event_rule("SCPCreateUpdateRule")
-test.create_event_rule("SCPDeleteRule")
-test.test_create_update_event_pattern("SCPCreateUpdateRule")
-test.test_delete_event_pattern("SCPDeleteRule")
