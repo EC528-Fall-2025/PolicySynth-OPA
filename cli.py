@@ -35,6 +35,7 @@ def fetch_scp_policies(args):
         sys.exit(1)
 
 
+
 def main():
     parser = argparse.ArgumentParser(
         prog='policysynth',
