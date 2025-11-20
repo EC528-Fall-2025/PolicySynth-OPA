@@ -456,3 +456,64 @@ class SCPEventBridgeHandler:
                     return False
             print(f"Error testing delete event pattern: {str(e)}")
             return False
+
+# TODO: Delete this when merging, just for testing purposes
+def test_step_function_setup():
+    """Test the Step Function creation and Lambda addition"""
+    
+    # Initialize the handler
+    handler = SCPEventBridgeHandler()
+    
+    # 1. Create the EventBridge rule for create/update events
+    print("Creating EventBridge rule...")
+    rule_result = handler.create_event_rule("SCPCreateUpdateRule")
+    if rule_result:
+        print("✓ EventBridge rule created successfully")
+    else:
+        print("✗ Failed to create EventBridge rule")
+        return False
+    
+    # 2. Create Step Function target (you'll need to provide a valid IAM role ARN)
+    # Replace with your actual IAM role ARN for Step Functions
+    role_arn = "arn:aws:iam::135167709822:user/aamaya3"
+    
+    print("Creating Step Function state machine...")
+    sf_result = handler.create_step_function_target(
+        rule_name="SCPCreateUpdateRule",
+        state_machine_name="SCPProcessingStateMachine", 
+        role_arn=role_arn
+    )
+    
+    if sf_result:
+        print("✓ Step Function created successfully")
+        print(f"State Machine ARN: {sf_result['stateMachineArn']}")
+    else:
+        print("✗ Failed to create Step Function")
+        return False
+    
+    # 3. Add a test Lambda function (replace with your actual Lambda ARN)
+    test_lambda_arn = "arn:aws:lambda:us-east-1:135167709822:function:boto3-test"
+    
+    print("Adding test Lambda to Step Function...")
+    lambda_result = handler.add_lambda_to_step_function(
+        state_machine_name="SCPProcessingStateMachine",
+        lambda_function_arn=test_lambda_arn,
+        lambda_name="TestLambdaProcessor"
+    )
+    
+    if lambda_result:
+        print("✓ Test Lambda added successfully")
+    else:
+        print("✗ Failed to add test Lambda")
+        return False
+    
+    print("\n🎉 Setup complete! Now test in AWS Console:")
+    print("1. Go to Organizations console")
+    print("2. Create or update an SCP policy") 
+    print("3. Check Step Functions console to see execution")
+    print("4. Check CloudWatch logs for Lambda execution")
+    
+    return True
+
+if __name__ == "__main__":
+    test_step_function_setup()
