@@ -474,7 +474,7 @@ def test_step_function_setup():
         return False
     
     # 2. Create Step Function target (you'll need to provide a valid IAM role ARN)
-    role_arn = "arn:aws:iam::135167709822:role/StepFunction-SCPProcessing" 
+    role_arn = "arn:aws:iam::973646735135:role/StepFunction-SCPProcessing"
     print("Creating Step Function state machine...")
     sf_result = handler.create_step_function_target(
         rule_name="SCPCreateUpdateRule",
@@ -490,7 +490,7 @@ def test_step_function_setup():
         return False
     
     # 3. Add a test Lambda function (replace with your actual Lambda ARN)
-    test_lambda_arn = "arn:aws:lambda:us-east-1:135167709822:function:boto3-test"
+    test_lambda_arn = "arn:aws:lambda:us-east-2:973646735135:function:boto3-test"
     
     print("Adding test Lambda to Step Function...")
     lambda_result = handler.add_lambda_to_step_function(
