@@ -162,6 +162,8 @@ class SCPEventBridgeHandler:
             state_machine_arn = response['stateMachineArn']
             print(f"Created Step Functions state machine: {state_machine_arn}")
 
+            # input transformer is how we pass data onto our
+            # step function
             target_response = self.events_client.put_targets(
                 Rule=rule_name,
                 Targets=[
