@@ -124,7 +124,6 @@ class SCPEventBridgeHandler:
                                 "Next": "Fetch and Translate SCP"
                             }
                         ],
-                        "Default": "FailState"
                     },
                     "Delete Policy from S3": {
                         "Type": "Task",
@@ -149,11 +148,6 @@ class SCPEventBridgeHandler:
                         "Resource": "arn:aws:lambda:<region>:<account-id>:function:StoreSCPHandler",
                         "ResultPath": "$.storeResult",
                         "End": True
-                    },
-                    "FailState": {
-                        "Type": "Fail",
-                        "Error": "UnknownEventType",
-                        "Cause": "Received unsupported eventName"
                     }
                 }
             }
@@ -380,67 +374,103 @@ class SCPEventBridgeHandler:
             print(f"Error testing delete event pattern: {str(e)}")
             return False
 
+    def verify_setup(self) -> bool:
+        """Verify that all components were created successfully"""
+        print("\n=== Verifying Setup ===")
 
-# TODO: Delete this when merging, just for testing purposes
-def test_step_function_setup():
-    """Test the Step Function creation and Lambda addition"""
+        # Check EventBridge rule
+        # can also check via `aws events describe-rule --name SCPCreateUpdateRule`
+        try:
+            rule_response = self.events_client.describe_rule(Name="SCPCreateUpdateRule")
+            print(f"✓ EventBridge Rule: {rule_response['Name']} - {rule_response['State']}")
+            print(f"  Description: {rule_response.get('Description', 'N/A')}")
+        except ClientError as e:
+            print(f"✗ EventBridge Rule not found: {e}")
+            return False
 
-    # Initialize the handler
-    handler = SCPEventBridgeHandler()
+        # Check Step Function state machine
+        # `aws stepfunctions describe-state-machine --state-machine-arn arn:aws:states:us-east-1:<account_id>:stateMachine:SCPProcessingStateMachine`
+        # `aws stepfunctions list-state-machines`
+        try:
+            sts_client = boto3.client('sts')
+            account_id = sts_client.get_caller_identity()['Account']
+            sm_arn = f"arn:aws:states:us-east-1:{account_id}:stateMachine:SCPProcessingStateMachine"
 
-    # Get current account ID
-    sts_client = boto3.client('sts')
-    account_id = sts_client.get_caller_identity()['Account']
+            sm_response = self.stepfunctions_client.describe_state_machine(stateMachineArn=sm_arn)
+            print(f"✓ Step Function: {sm_response['name']} - {sm_response['status']}")
+            print(f"  ARN: {sm_response['stateMachineArn']}")
+        except ClientError as e:
+            print(f"✗ Step Function not found: {e}")
+            return False
 
-    # 1. Create the EventBridge rule for create/update events
-    print("Creating EventBridge rule...")
-    rule_result = handler.create_event_rule("SCPCreateUpdateRule")
-    if rule_result:
-        print("✓ EventBridge rule created successfully")
-    else:
-        print("✗ Failed to create EventBridge rule")
-        return False
+        # Check EventBridge targets
+        # `aws events list-targets-by-rule --rule SCPCreateUpdateRule`
+        try:
+            targets_response = self.events_client.list_targets_by_rule(Rule="SCPCreateUpdateRule")
+            if targets_response['Targets']:
+                print(f"✓ EventBridge Targets: {len(targets_response['Targets'])} target(s)")
+                for target in targets_response['Targets']:
+                    print(f"  Target ID: {target['Id']}, ARN: {target['Arn']}")
+            else:
+                print("⚠️  No targets found for EventBridge rule")
+        except ClientError as e:
+            print(f"✗ Error checking targets: {e}")
 
-    # 2. Create Step Function target (use role from current account)
-    role_arn = f"arn:aws:iam::{account_id}:role/StepFunction-SCPProcessing"
-    print(f"Using role for account {account_id}: {role_arn}")
-    print("Creating Step Function state machine...")
-    sf_result = handler.create_step_function_target(
-        rule_name="SCPCreateUpdateRule",
-        state_machine_name="SCPProcessingStateMachine", 
-        role_arn=role_arn
-    )
+        # Test event pattern
+        print("\n=== Testing Event Patterns ===")
+        create_update_test = self.test_create_update_event_pattern("SCPCreateUpdateRule")
+        if create_update_test:
+            print("✓ Create/Update event pattern works correctly")
+        else:
+            print("✗ Create/Update event pattern failed")
 
-    if sf_result:
-        print("✓ Step Function created successfully")
-        print(f"State Machine ARN: {sf_result['stateMachineArn']}")
-    else:
-        print("✗ Failed to create Step Function")
-        return False
+        return True
 
-    # 3. Add a test Lambda function (use Lambda from current account)
-    test_lambda_arn = f"arn:aws:lambda:us-east-1:{account_id}:function:boto3-test"
+    def setup_step_function(self):
+        """Test the Step Function creation + eventbridge creaiton"""
+        handler = SCPEventBridgeHandler()
 
-    print("Adding test Lambda to Step Function...")
-    lambda_result = handler.add_lambda_to_step_function(
-        state_machine_name="SCPProcessingStateMachine",
-        lambda_function_arn=test_lambda_arn,
-        lambda_name="TestLambdaProcessor"
-    )
+        # Get current account ID
+        sts_client = boto3.client('sts')
+        account_id = sts_client.get_caller_identity()['Account']
 
-    if lambda_result:
-        print("✓ Test Lambda added successfully")
-    else:
-        print("✗ Failed to add test Lambda")
-        return False
+        # eventbridge rule
+        print("Creating EventBridge rule...")
+        rule_result = handler.create_event_rule("SCPCreateUpdateRule")
+        if rule_result:
+            print("✓ EventBridge rule created successfully")
+        else:
+            print("✗ Failed to create EventBridge rule")
+            return False
 
-    print("\n🎉 Setup complete! Now test in AWS Console:")
-    print("1. Go to Organizations console")
-    print("2. Create or update an SCP policy") 
-    print("3. Check Step Functions console to see execution")
-    print("4. Check CloudWatch logs for Lambda execution")
-    
-    return True
+        # step function
+        role_arn = f"arn:aws:iam::{account_id}:role/StepFunction-SCPProcessing"
+        print(f"Using role for account {account_id}: {role_arn}")
+        print("Creating Step Function state machine...")
+        sf_result = handler.create_step_function_target(
+            rule_name="SCPCreateUpdateRule",
+            state_machine_name="SCPProcessingStateMachine", 
+            role_arn=role_arn
+        )
+
+        if sf_result:
+            print("✓ Step Function created successfully")
+            print(f"State Machine ARN: {sf_result['stateMachineArn']}")
+        else:
+            print("✗ Failed to create Step Function")
+            return False
+
+        self.verify_setup()
+
+        print("\n🎉 Setup complete! Now test in AWS Console:")
+        print("1. Go to Organizations console")
+        print("2. Create or update an SCP policy") 
+        print("3. Check Step Functions console to see execution")
+        print("4. Check CloudWatch logs for Lambda execution")
+
+        return True
 
 if __name__ == "__main__":
-    test_step_function_setup()
+    handler = SCPEventBridgeHandler()
+
+    handler.setup_step_function()
