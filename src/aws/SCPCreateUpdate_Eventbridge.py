@@ -25,16 +25,16 @@ class SCPEventBridgeHandler:
 
         self.events_client = boto3.client(
             'events',
-            region_name=self.config.get('region', 'us-east-2')
+            region_name=self.config.get('region', 'us-east-1')
         )
 
         self.stepfunctions_client = boto3.client(
             'stepfunctions',
-            region_name=self.config.get('region', 'us-east-2')
+            region_name=self.config.get('region', 'us-east-1')
         )
         self.lambda_client = boto3.client(
             'lambda',
-            region_name=self.config.get('region', 'us-east-2')
+            region_name=self.config.get('region', 'us-east-1')
         )
 
     def create_event_rule(self, rule_name: str = "SCPCreateUpdateRule") -> dict | None:
@@ -201,7 +201,7 @@ class SCPEventBridgeHandler:
                 # Get existing state machine ARN
                 try:
                     existing_sm = self.stepfunctions_client.describe_state_machine(
-                        stateMachineArn=f"arn:aws:states:{self.config.get('region', 'us-east-2')}:{boto3.client('sts').get_caller_identity()['Account']}:stateMachine:{state_machine_name}"
+                        stateMachineArn=f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{boto3.client('sts').get_caller_identity()['Account']}:stateMachine:{state_machine_name}"
                     )
                     return {'stateMachineArn': existing_sm['stateMachineArn']}
                 except:
@@ -227,7 +227,7 @@ class SCPEventBridgeHandler:
         try:
             # Get current state machine definition
             account_id = boto3.client('sts').get_caller_identity()['Account']
-            state_machine_arn = f"arn:aws:states:{self.config.get('region', 'us-east-2')}:{account_id}:stateMachine:{state_machine_name}"
+            state_machine_arn = f"arn:aws:states:{self.config.get('region', 'us-east-1')}:{account_id}:stateMachine:{state_machine_name}"
 
             sm_response = self.stepfunctions_client.describe_state_machine(
                 stateMachineArn=state_machine_arn
@@ -304,7 +304,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T10:00:00Z",
-            "region": "us-east-2",
+            "region": "us-east-1",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -317,7 +317,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T10:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "CreatePolicy",
-                "awsRegion": "us-east-2",
+                "awsRegion": "us-east-1",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "name": "TestSCPPolicy",
@@ -335,7 +335,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T11:00:00Z",
-            "region": "us-east-2",
+            "region": "us-east-1",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -348,7 +348,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T11:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "UpdatePolicy",
-                "awsRegion": "us-east-2",
+                "awsRegion": "us-east-1",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "policyId": "p-12345678",
@@ -401,7 +401,7 @@ class SCPEventBridgeHandler:
             "source": "aws.organizations",
             "account": "123456789012",
             "time": "2025-11-20T12:00:00Z",
-            "region": "us-east-2",
+            "region": "us-east-1",
             "detail": {
                 "eventVersion": "1.05",
                 "userIdentity": {
@@ -414,7 +414,7 @@ class SCPEventBridgeHandler:
                 "eventTime": "2025-11-20T12:00:00Z",
                 "eventSource": "organizations.amazonaws.com",
                 "eventName": "DeletePolicy",
-                "awsRegion": "us-east-2",
+                "awsRegion": "us-east-1",
                 "sourceIPAddress": "192.0.2.1",
                 "requestParameters": {
                     "policyId": "p-12345678"
@@ -462,13 +462,18 @@ class SCPEventBridgeHandler:
             print(f"Error testing delete event pattern: {str(e)}")
             return False
 
+
 # TODO: Delete this when merging, just for testing purposes
 def test_step_function_setup():
     """Test the Step Function creation and Lambda addition"""
-    
+
     # Initialize the handler
     handler = SCPEventBridgeHandler()
-    
+
+    # Get current account ID
+    sts_client = boto3.client('sts')
+    account_id = sts_client.get_caller_identity()['Account']
+
     # 1. Create the EventBridge rule for create/update events
     print("Creating EventBridge rule...")
     rule_result = handler.create_event_rule("SCPCreateUpdateRule")
@@ -477,39 +482,40 @@ def test_step_function_setup():
     else:
         print("✗ Failed to create EventBridge rule")
         return False
-    
-    # 2. Create Step Function target (you'll need to provide a valid IAM role ARN)
-    role_arn = "arn:aws:iam::973646735135:role/StepFunction-SCPProcessing"
+
+    # 2. Create Step Function target (use role from current account)
+    role_arn = f"arn:aws:iam::{account_id}:role/StepFunction-SCPProcessing"
+    print(f"Using role for account {account_id}: {role_arn}")
     print("Creating Step Function state machine...")
     sf_result = handler.create_step_function_target(
         rule_name="SCPCreateUpdateRule",
         state_machine_name="SCPProcessingStateMachine", 
         role_arn=role_arn
     )
-    
+
     if sf_result:
         print("✓ Step Function created successfully")
         print(f"State Machine ARN: {sf_result['stateMachineArn']}")
     else:
         print("✗ Failed to create Step Function")
         return False
-    
-    # 3. Add a test Lambda function (replace with your actual Lambda ARN)
-    test_lambda_arn = "arn:aws:lambda:us-east-2:973646735135:function:boto3-test"
-    
+
+    # 3. Add a test Lambda function (use Lambda from current account)
+    test_lambda_arn = f"arn:aws:lambda:us-east-1:{account_id}:function:boto3-test"
+
     print("Adding test Lambda to Step Function...")
     lambda_result = handler.add_lambda_to_step_function(
         state_machine_name="SCPProcessingStateMachine",
         lambda_function_arn=test_lambda_arn,
         lambda_name="TestLambdaProcessor"
     )
-    
+
     if lambda_result:
         print("✓ Test Lambda added successfully")
     else:
         print("✗ Failed to add test Lambda")
         return False
-    
+
     print("\n🎉 Setup complete! Now test in AWS Console:")
     print("1. Go to Organizations console")
     print("2. Create or update an SCP policy") 
