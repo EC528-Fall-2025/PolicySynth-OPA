@@ -6,8 +6,8 @@ from botocore.exceptions import ClientError, NoCredentialsError, PartialCredenti
 
 class SCPEventBridgeHandler:
     '''
-    If you're cross testing this, you need to make sure that CloudTrail
-    is enabled since eventbridge relies on it to capture AWS API calls.
+    Class that sets up eventbridge rules as well as the skeleton for
+    the step function that we'll be using for scp validation
     '''
     def __init__(self, config: Dict[str, Any]=None):
         self.config = config or {}
@@ -127,25 +127,25 @@ class SCPEventBridgeHandler:
                     },
                     "Delete Policy from S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:DeleteSCPHandler",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "ResultPath": "$.deleteResult",
                         "End": True
                     },
                     "Fetch and Translate SCP": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:FetchTranslateHandler",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "ResultPath": "$.translationResult",
                         "Next": "Validate Policy"
                     },
                     "Validate Policy": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:ValidationHandler",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "ResultPath": "$.validationResult",
                         "Next": "Store Policy in S3"
                     },
                     "Store Policy in S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:<region>:<account-id>:function:StoreSCPHandler",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "ResultPath": "$.storeResult",
                         "End": True
                     }
@@ -155,7 +155,7 @@ class SCPEventBridgeHandler:
             response = self.stepfunctions_client.create_state_machine(
                 name=state_machine_name,
                 definition=json.dumps(state_machine_defintition),
-                roleArn=role_arn,  # can't this just be assumed from the user credentials?
+                roleArn=role_arn,
                 type='STANDARD'
             )
 
@@ -438,9 +438,16 @@ class SCPEventBridgeHandler:
         print("Creating EventBridge rule...")
         rule_result = handler.create_event_rule("SCPCreateUpdateRule")
         if rule_result:
-            print("✓ EventBridge rule created successfully")
+            print("✓ EventBridge create/update rule created successfully")
         else:
-            print("✗ Failed to create EventBridge rule")
+            print("✗ Failed to create create/update EventBridge rule")
+            return False
+        
+        rule_result = handler.create_event_rule("SCPDeleteRule")
+        if rule_result:
+            print("✓ EventBridge delete rule created successfully")
+        else:
+            print("✗ Failed to create delete EventBridge rule")
             return False
 
         # step function
@@ -458,6 +465,19 @@ class SCPEventBridgeHandler:
             print(f"State Machine ARN: {sf_result['stateMachineArn']}")
         else:
             print("✗ Failed to create Step Function")
+            return False
+
+        print("Adding Step Function target for delete rule...")
+        delete_target_result = handler.create_step_function_target(
+            rule_name="SCPDeleteRule",
+            state_machine_name="SCPProcessingStateMachine",
+            role_arn=role_arn
+        )
+
+        if delete_target_result:
+            print("✓ Delete rule target added successfully")
+        else:
+            print("✗ Failed to add target for delete rule")
             return False
 
         self.verify_setup()
