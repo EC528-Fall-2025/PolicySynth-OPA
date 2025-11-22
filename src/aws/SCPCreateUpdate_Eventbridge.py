@@ -109,17 +109,17 @@ class SCPEventBridgeHandler:
                         "Type": "Choice",
                         "Choices": [
                             {
-                                "Variable": "$.detail.eventName",
+                                "Variable": "$.eventName",
                                 "StringEquals": "DeletePolicy",
                                 "Next": "Delete Policy from S3"
                             },
                             {
-                                "Variable": "$.detail.eventName",
+                                "Variable": "$.eventName",
                                 "StringEquals": "CreatePolicy",
                                 "Next": "Fetch and Translate SCP"
                             },
                             {
-                                "Variable": "$.detail.eventName",
+                                "Variable": "$.eventName",
                                 "StringEquals": "UpdatePolicy",
                                 "Next": "Fetch and Translate SCP"
                             }
