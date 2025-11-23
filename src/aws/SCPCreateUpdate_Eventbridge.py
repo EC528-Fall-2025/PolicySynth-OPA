@@ -14,8 +14,6 @@ class SCPEventBridgeHandler:
         self.config = config or {}
         try:
             sts_client = boto3.client('sts')
-            identity = sts_client.get_caller_identity()
-            print(f"Using AWS credentials for account: {identity['Account']}")
         except (NoCredentialsError, PartialCredentialsError) as e:
             raise Exception(f"AWS credentials not found or incomplete: {str(e)}")
         except ClientError as e:
@@ -33,6 +31,8 @@ class SCPEventBridgeHandler:
             'stepfunctions',
             region_name=self.config.get('region', 'us-east-1')
         )
+
+        self.eventbridge_checker = EventbrdigeChecker()
 
     def create_event_rule(self, rule_name: str = "SCPCreateUpdateRule") -> dict | None:
         '''Creates an EventBridge rule to capture SCP create and update events.'''
@@ -212,9 +212,73 @@ class SCPEventBridgeHandler:
         except Exception as e:
             print(f"Unexpected error creating Step Functions target: {str(e)}")
             return None
+    
+    def setup_step_function(self):
+        """Test the Step Function creation + eventbridge creaiton"""
+        handler = SCPEventBridgeHandler()
+
+        # Get current account ID
+        sts_client = boto3.client('sts')
+        account_id = sts_client.get_caller_identity()['Account']
+
+        # eventbridge rule
+        print("Creating EventBridge rule...")
+        rule_result = handler.create_event_rule("SCPCreateUpdateRule")
+        if rule_result:
+            print("✓ EventBridge create/update rule created successfully")
+        else:
+            print("✗ Failed to create create/update EventBridge rule")
+            return False
+
+        rule_result = handler.create_event_rule("SCPDeleteRule")
+        if rule_result:
+            print("✓ EventBridge delete rule created successfully")
+        else:
+            print("✗ Failed to create delete EventBridge rule")
+            return False
+
+        # step function
+        role_arn = f"arn:aws:iam::{account_id}:role/StepFunction-SCPProcessing"
+        print(f"Using role for account {account_id}: {role_arn}")
+        print("Creating Step Function state machine...")
+        sf_result = handler.create_step_function_target(
+            rule_name="SCPCreateUpdateRule",
+            state_machine_name="SCPProcessingStateMachine", 
+            role_arn=role_arn
+        )
+
+        if sf_result:
+            print("✓ Step Function created successfully")
+            print(f"State Machine ARN: {sf_result['stateMachineArn']}")
+        else:
+            print("✗ Failed to create Step Function")
+            return False
+
+        print("Adding Step Function target for delete rule...")
+        delete_target_result = handler.create_step_function_target(
+            rule_name="SCPDeleteRule",
+            state_machine_name="SCPProcessingStateMachine",
+            role_arn=role_arn
+        )
+
+        if delete_target_result:
+            print("✓ Delete rule target added successfully")
+        else:
+            print("✗ Failed to add target for delete rule")
+            return False
+
+        self.eventbridge_checker.verify_setup()
+
+        print("\n🎉 Setup complete! Now test in AWS Console:")
+        print("1. Go to Organizations console")
+        print("2. Create or update an SCP policy") 
+        print("3. Check Step Functions console to see execution")
+        print("4. Check CloudWatch logs for Lambda execution")
+
+        return True
 
 
 if __name__ == "__main__":
-    handler = EventbrdigeChecker()
+    handler = SCPEventBridgeHandler()
 
     handler.setup_step_function()

@@ -251,7 +251,7 @@ class EventbrdigeChecker:
 
     def setup_step_function(self):
         """Test the Step Function creation + eventbridge creaiton"""
-        handler = SCPEventBridgeHandler()
+        handler = EventbrdigeChecker()
 
         # Get current account ID
         sts_client = boto3.client('sts')
