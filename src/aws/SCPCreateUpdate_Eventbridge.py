@@ -76,7 +76,7 @@ class SCPEventBridgeHandler:
                       "Please check your AWS Secret Access Key.")
 
             elif error_code == 'UnrecognizedClientException':
-                print("The security token included in the request is invalid" 
+                print("The security token included in the request is invalid"
                       "Please check your AWS credentials.")
 
             else:
@@ -124,7 +124,6 @@ class SCPEventBridgeHandler:
                     "Delete Policy from S3": {
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
-                        "ResultPath": "$.deleteResult",
                         "End": True
                     },
                     "Fetch and Translate SCP": {
