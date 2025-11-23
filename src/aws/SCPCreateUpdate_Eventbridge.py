@@ -440,7 +440,7 @@ class SCPEventBridgeHandler:
         else:
             print("✗ Failed to create create/update EventBridge rule")
             return False
-        
+
         rule_result = handler.create_event_rule("SCPDeleteRule")
         if rule_result:
             print("✓ EventBridge delete rule created successfully")
