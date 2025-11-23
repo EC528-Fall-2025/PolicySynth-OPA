@@ -146,7 +146,27 @@ class SCPEventBridgeHandler:
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "ResultPath": "$.validationResult",
-                        "Next": "Store Policy in S3"
+                        "Next": "Check Validation Result"
+                    },
+                    "Check Validation Result": {
+                        "Type": "Choice",
+                        "Choices": [
+                            {
+                                "Variable": "$.validationResult.errors",
+                                "StringEquals": "",
+                                "Next": "Store Policy in S3"
+                            }
+                        ],
+                        "Default": "Retry Transform"
+                    },
+                    "Retry Transform": {
+                        "Type": "Pass",
+                        "Parameters": {
+                            "scp.$": "$.scp",
+                            "previous_rego.$": "$.translationResult.rego",
+                            "errors.$": "$.validationResult.errors"
+                        },
+                        "Next": "Generate Rego"
                     },
                     "Store Policy in S3": {
                         "Type": "Task",
