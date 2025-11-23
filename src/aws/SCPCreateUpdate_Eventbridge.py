@@ -32,10 +32,6 @@ class SCPEventBridgeHandler:
             'stepfunctions',
             region_name=self.config.get('region', 'us-east-1')
         )
-        self.lambda_client = boto3.client(
-            'lambda',
-            region_name=self.config.get('region', 'us-east-1')
-        )
 
     def create_event_rule(self, rule_name: str = "SCPCreateUpdateRule") -> dict | None:
         '''Creates an EventBridge rule to capture SCP create and update events.'''
