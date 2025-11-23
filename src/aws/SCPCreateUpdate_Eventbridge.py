@@ -123,7 +123,7 @@ class SCPEventBridgeHandler:
                     },
                     "Delete Policy from S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete-scp-policy",
                         "End": True
                     },
                     "Fetch and Translate SCP": {
@@ -140,7 +140,7 @@ class SCPEventBridgeHandler:
                     },
                     "Store Policy in S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:store-scp-policy",
                         "ResultPath": "$.storeResult",
                         "End": True
                     }
