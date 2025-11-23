@@ -128,7 +128,7 @@ class SCPEventBridgeHandler:
                     },
                     "Fetch and Translate SCP": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "ResultPath": "$.translationResult",
                         "Next": "Validate Policy"
                     },
