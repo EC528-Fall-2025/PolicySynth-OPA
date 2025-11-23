@@ -113,21 +113,30 @@ class SCPEventBridgeHandler:
                             {
                                 "Variable": "$.eventName",
                                 "StringEquals": "CreatePolicy",
-                                "Next": "Fetch and Translate SCP"
+                                "Next": "Create Transform"
                             },
                             {
                                 "Variable": "$.eventName",
                                 "StringEquals": "UpdatePolicy",
-                                "Next": "Fetch and Translate SCP"
+                                "Next": "Create Transform"
                             }
                         ],
+                    },
+                    "Create Transform": {
+                        "Type": "Pass",
+                        "Parameters": {
+                            "scp.$": "States.StringToJson($.policyContent)",
+                            "previous_rego": "",
+                            "errors": ""
+                        },
+                        "Next": "Generate Rego"
                     },
                     "Delete Policy from S3": {
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete_lambda_test_for_step",
                         "End": True
                     },
-                    "Fetch and Translate SCP": {
+                    "Generate Rego": {
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "ResultPath": "$.translationResult",
