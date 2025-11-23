@@ -127,7 +127,8 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "scp.$": "States.StringToJson($.policyContent)",
                             "previous_rego": "",
-                            "errors": ""
+                            "errors": "",
+                            "counter": 0
                         },
                         "Next": "Generate Rego"
                     },
@@ -157,6 +158,17 @@ class SCPEventBridgeHandler:
                                 "Next": "Store Policy in S3"
                             }
                         ],
+                        "Default": "Check Retry Limit"
+                    },
+                    "Check Retry Limit": {
+                        "Type": "Choice",
+                        "Choices": [
+                            {
+                                "Variable": "$.counter",
+                                "NumericGreaterThanEquals": 5,
+                                "Next": "Generation Failed"
+                            }
+                        ],
                         "Default": "Retry Transform"
                     },
                     "Retry Transform": {
@@ -164,9 +176,15 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "scp.$": "$.scp",
                             "previous_rego.$": "$.translationResult.rego",
-                            "errors.$": "$.validationResult.errors"
+                            "errors.$": "$.validationResult.errors",
+                            "counter.$": "States.MathAdd($.counter, 1)"
                         },
                         "Next": "Generate Rego"
+                    },
+                    "Generation Failed": {
+                        "Type": "Fail",
+                        "Cause": "Policy generation failed after 5 attempts",
+                        "Error": "GenerationFailure"
                     },
                     "Store Policy in S3": {
                         "Type": "Task",
