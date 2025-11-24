@@ -125,6 +125,11 @@ class SCPEventBridgeHandler:
                     "Create Transform": {
                         "Type": "Pass",
                         "Parameters": {
+                            "eventName.$": "$.eventName",
+                            "policyId.$": "$.policyId",
+                            "policyName.$": "$.policyName",
+                            "timestamp.$": "$.timestamp",
+                            "policyContent.$": "$.policyContent",
                             "scp.$": "States.StringToJson($.policyContent)",
                             "previous_rego": "",
                             "errors": "",
@@ -134,7 +139,7 @@ class SCPEventBridgeHandler:
                     },
                     "Delete Policy from S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:store-scp-policy",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete-scp-policy",
                         "End": True
                     },
                     "Generate Rego": {
@@ -188,7 +193,7 @@ class SCPEventBridgeHandler:
                     },
                     "Store Policy in S3": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:delete-scp-policy",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:store-scp-policy",
                         "ResultPath": "$.storeResult",
                         "End": True
                     }
