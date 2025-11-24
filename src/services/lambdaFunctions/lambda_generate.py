@@ -14,6 +14,7 @@ model_id = "global.anthropic.claude-sonnet-4-5-20250929-v1:0" # have to use the 
 # build prompt creates general prompt for LLM with inputscp, previous rego, and validation errors if applicable. 
 def build_prompt(inputSCP, previous_rego="", validation_errors=""): 
     prompt = f"""
+    <<CONTEXT>> 
     You are an expert in AWS IAM, Service Control Policies (SCPs), and OPA Rego.
 
     Your task: Convert the following AWS SCP JSON into a functionally equivalent
@@ -42,7 +43,7 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     4. If previous Rego exists, refine it rather than rewriting blindly.
     5. Do NOT include explanations or comments unless formatted as Rego comments.
     6. The output MUST define the following required entrypoint so it can be evaluated by another Lambda:
-
+    THE PACKAGE NAME MUST ALWAYS BE EXACTLY:
     package scp
 
     ## Required final rule (choose one depending on the SCP's intended semantics):
@@ -55,19 +56,22 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     This rule will be evaluated using:
     opa eval --format=json -d policy.rego "data.scp"
 
-    Output:
+    BEGIN OUTPUT (Rego only, no markdown):
     """
     return prompt  
 def lambda_handler(event, context): 
     try: 
-        if "scp" not in event:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Missing 'scp' in request"})
-            }
         scp = event["scp"]
         prev_rego = event.get("previous_rego","") # fetch previous rego that failed if exists
         errors = event.get("validation_errors","") ## if previous rego did not pass we need the validation errors to feed context to Claude
+        input_data = event["input_data"]
+        query = event["query"]
+        if "scp" not in event:
+            return {
+                "scp": scp,
+                "previous_rego":prev_rego, 
+                "errors": "Missing SCP in event"
+            }
         # build prompt with args
         prompt = build_prompt(scp, prev_rego, errors)
         # call claude passing arguments
@@ -85,18 +89,16 @@ def lambda_handler(event, context):
         rego_output = content[0]["text"]
         rego_output = strip_fenced_code(rego_output)
         return {
-            "statusCode": 200,
-            "body": json.dumps({
-                "rego": rego_output,
-                "stopReason": response.get("stopReason"),
-                "usage": response.get("usage", {})
-            })
+            "scp": scp, 
+            "previous_rego": rego_output,
+            "errors": ""
         }
     except Exception as e:
         print(f"Error in lambda function: ", str(e))
         return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
+            "scp":scp,
+            "previous_rego":prev_rego,
+            "errors": "Error in lambda function generate"
         }
 
 
