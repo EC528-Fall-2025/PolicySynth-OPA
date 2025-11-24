@@ -120,7 +120,7 @@ class SCPEventBridgeHandler:
                                 "StringEquals": "UpdatePolicy",
                                 "Next": "Create Transform"
                             }
-                        ],
+                        ]
                     },
                     "Create Transform": {
                         "Type": "Pass",
@@ -146,14 +146,54 @@ class SCPEventBridgeHandler:
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "ResultPath": "$.translationResult",
-                        "Next": "Validate Policy"
+                        "Next": "Validate Syntax Policy"
                     },
-                    "Validate Policy": {
+                    "Validate Syntax Policy": {
                         "Type": "Task",
-                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSyntaxLambda",
+                        "Resource": "arn:aws:states:::lambda:invoke",
+                        "OutputPath": "$.Payload",
+                        "ResultPath": "$.syntaxResult",
+                        "Parameters": {
+                            "Payload.$": "$",
+                            "FunctionName": "arn:aws:lambda:us-east-1:973646735135:function:validateSyntaxLambda"
+                        },
+                        "Retry": [
+                            {
+                                "ErrorEquals": [
+                                    "Lambda.ServiceException",
+                                    "Lambda.AWSLambdaException",
+                                    "Lambda.SdkClientException",
+                                    "Lambda.TooManyRequestsException"
+                                ],
+                                "IntervalSeconds": 1,
+                                "MaxAttempts": 3,
+                                "BackoffRate": 2,
+                                "JitterStrategy": "FULL"
+                            }
+                        ],
+                        "Next": "Check Syntax Validation Result"
+                    },
+                    "Check Syntax Validation Result": {
+                        "Type": "Choice",
+                        "Choices": [
+                            {
+                                "Variable": "$.syntaxResult.errors",
+                                "StringEquals": "",
+                                "Next": "Validate Semantic Policy"
+                            }
+                        ],
+                        "Default": "Pass"
+                    },
+                    "Pass": {
+                        "Type": "Pass", # i don't think we need this pass state
+                        "Next": "Generate Rego"
+                    },
+                    "Validate Semantic Policy": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSemanticLambda",
                         "ResultPath": "$.validationResult",
                         "Next": "Check Validation Result"
-                    },
+                        },
                     "Check Validation Result": {
                         "Type": "Choice",
                         "Choices": [
@@ -198,7 +238,7 @@ class SCPEventBridgeHandler:
                         "End": True
                     }
                 }
-            }
+                }
 
             response = self.stepfunctions_client.create_state_machine(
                 name=state_machine_name,
