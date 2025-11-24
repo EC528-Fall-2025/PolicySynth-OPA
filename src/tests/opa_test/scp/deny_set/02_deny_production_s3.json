@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyProductionS3Changes",
+      "Effect": "Deny",
+      "Action": [
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucket",
+        "s3:PutBucketAcl"
+      ],
+      "Resource": [
+        "arn:aws:s3:::production-*",
+        "arn:aws:s3:::prod-*"
+      ]
+    }
+  ]
+}
