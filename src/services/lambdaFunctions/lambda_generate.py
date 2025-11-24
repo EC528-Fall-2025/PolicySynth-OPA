@@ -41,10 +41,23 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     - Condition operators
     4. If previous Rego exists, refine it rather than rewriting blindly.
     5. Do NOT include explanations or comments unless formatted as Rego comments.
+    6. The output MUST define the following required entrypoint so it can be evaluated by another Lambda:
+
+    package scp
+
+    ## Required final rule (choose one depending on the SCP's intended semantics):
+    # deny conditions
+    # allow conditions
+    # decision = {"allow": allow, "deny": deny}
+
+    Your output MUST include one and only one of: deny, allow, or decision.
+
+    This rule will be evaluated using:
+    opa eval --format=json -d policy.rego "data.scp"
 
     Output:
     """
-    return prompt 
+    return prompt  
 def lambda_handler(event, context): 
     try: 
         if "scp" not in event:
