@@ -35,9 +35,7 @@ def lambda_handler(event,context):
                 return {
                     "scp": scp,
                     "previous_rego": rego_code,
-                    "rego": rego_code,
-                    "errors": "",
-                    "eval_result": json.dumps(eval_result) if isinstance(eval_result, dict) else str(eval_result)
+                    "errors": json.dumps(eval_result) if isinstance(eval_result, dict) else str(eval_result)
                 }
             else:
                 return {
