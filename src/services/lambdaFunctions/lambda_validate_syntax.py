@@ -56,8 +56,8 @@ def lambda_handler(event,context):
         passed, errors = run_opa_check(rego)
         logger.debug("OPA check result for policy_id=%s: passed=%s, errors=%s", policy_id, passed, errors)
         if passed and len(errors) == 0:
-            input_data = fetch_input_data(policy_id)
-            if "input_data" not in event or not input_data: # cant run opa eval without test inputs
+            input_data = event.get("input_data", fetch_input_data(policy_id))
+            if not input_data:
                 logger.warning("No input data available for opa eval for policy_id=%s", policy_id)
                 return {
                     "scp": scp,
