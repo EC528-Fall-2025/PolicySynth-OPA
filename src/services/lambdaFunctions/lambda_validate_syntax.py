@@ -3,7 +3,6 @@ import boto3
 import os
 import subprocess
 import tempfile
-from typing import Dict, Any
 
 # fetch input data for opa eval
 s3 = boto3.client("s3")
