@@ -85,7 +85,7 @@ def lambda_handler(event,context):
             logger.error("Missing 'scp' in request payload")
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Missing 'scp' in request"})
+                "error": "Missing 'scp' in request"
             }
         scp = event["scp"]
         prev_rego = event.get("previous_rego","") # fetch previous rego that failed if exists
@@ -131,13 +131,11 @@ def lambda_handler(event,context):
         # if there are no errors then errors is set to nothing and therefore passes 
         return {
             "statusCode": 200,
-            "body": json.dumps({
-                "scp": scp,
-                "previous_rego": prev_rego,
-                "errors": errors,
-                "stopReason": response.get("stopReason"),
-                "usage": response.get("usage", {})
-            })
+            "scp": scp,
+            "previous_rego": prev_rego,
+            "stopReason": response.get("stopReason"),
+            "usage": response.get("usage", {}),
+            "errors": errors
         }
     except Exception as e:
         # Log full stack trace to CloudWatch logs for debugging
@@ -147,5 +145,6 @@ def lambda_handler(event,context):
         logger.debug("Stack trace: %s", tb)
         return {
             "statusCode": 500,
-            "body": json.dumps({"error": str(tb)})
+            "error": str(e),
+            "stack_trace": tb
         }
