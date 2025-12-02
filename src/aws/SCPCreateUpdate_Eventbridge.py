@@ -212,7 +212,7 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "policyId.$": "$.policyId",
                             "scp.$": "$.scp",
-                            "previous_rego.$": "$.translationResult.previous_rego",
+                            "previous_rego.$": "$.generateResult.previous_rego",
                             "errors.$": "$.syntaxResult.errors",
                             "counter.$": "States.MathAdd($.counter, 1)"
                         },
@@ -223,7 +223,7 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "policyId.$": "$.policyId",
                             "scp.$": "$.scp",
-                            "previous_rego.$": "$.translationResult.previous_rego",
+                            "previous_rego.$": "$.generateResult.previous_rego",
                             "errors.$": "$.validationResult.errors",
                             "counter.$": "States.MathAdd($.counter, 1)"
                         },
