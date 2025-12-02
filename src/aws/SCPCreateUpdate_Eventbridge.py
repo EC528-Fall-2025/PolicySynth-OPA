@@ -175,9 +175,9 @@ class SCPEventBridgeHandler:
                         "Type": "Choice",
                         "Choices": [
                             {
-                            "Variable": "$.validationResult.errors",
-                            "StringEquals": "",
-                            "Next": "Store Policy in S3"
+                                "Variable": "$.validationResult.errors",
+                                "StringEquals": "",
+                                "Next": "Store Policy in S3"
                             }
                         ],
                         "Default": "Check Retry Limit Validation"
@@ -186,9 +186,9 @@ class SCPEventBridgeHandler:
                         "Type": "Choice",
                         "Choices": [
                             {
-                            "Variable": "$.counter",
-                            "NumericGreaterThanEquals": 5,
-                            "Next": "Generation Failed"
+                                "Variable": "$.counter",
+                                "NumericGreaterThanEquals": 5,
+                                "Next": "Generation Failed"
                             }
                         ],
                         "Default": "Retry Semantic Transform"
@@ -266,7 +266,7 @@ class SCPEventBridgeHandler:
                                 'policyId': '$.detail.requestParameters.policyId',
                                 'policyName': '$.detail.requestParameters.name',
                                 'ingestionTime': '$.time',
-                                "counter": 0
+                                "counter": "0"
                             },
                             'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>}'
                         }
