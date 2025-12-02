@@ -4,14 +4,19 @@ import os
 import subprocess
 import tempfile
 import logging
+import sys
 
 # fetch input data for opa eval
 s3 = boto3.client("s3")
 
 # logger setup
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("lambda_validate_syntax")
+logger.setLevel(LOG_LEVEL)
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(handler)
 logger.debug("Logger initialized with level %s", LOG_LEVEL)
 
 
