@@ -78,7 +78,8 @@ def lambda_handler(event,context):
                 return {
                     "scp": scp,
                     "previous_rego": rego,
-                    "errors": json.dumps(eval_result) if isinstance(eval_result, dict) else str(eval_result)
+                    "result": json.dumps(eval_result) if isinstance(eval_result, dict) else str(eval_result),
+                    "errors": ""
                 }
             else:
                 logger.error("OPA eval failed for policy_id=%s: %s", policy_id, eval_result)
