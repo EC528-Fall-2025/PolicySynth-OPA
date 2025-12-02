@@ -133,7 +133,9 @@ class SCPEventBridgeHandler:
                             "scp.$": "States.StringToJson($.policyContent)",
                             "previous_rego": "",
                             "errors": "",
-                            "counter": 0
+                            "counter": 0,
+                            "input_data": "",
+                            "query": "data.scp"
                         },
                         "Next": "Generate Rego"
                     },
@@ -145,32 +147,12 @@ class SCPEventBridgeHandler:
                     "Generate Rego": {
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
-                        "ResultPath": "$.translationResult",
                         "Next": "Validate Syntax Policy"
                     },
                     "Validate Syntax Policy": {
                         "Type": "Task",
-                        "Resource": "arn:aws:states:::lambda:invoke",
-                        "OutputPath": "$.Payload",
                         "ResultPath": "$.syntaxResult",
-                        "Parameters": {
-                            "Payload.$": "$",
-                            "FunctionName": "arn:aws:lambda:us-east-1:973646735135:function:validateSyntaxLambda"
-                        },
-                        "Retry": [
-                            {
-                                "ErrorEquals": [
-                                    "Lambda.ServiceException",
-                                    "Lambda.AWSLambdaException",
-                                    "Lambda.SdkClientException",
-                                    "Lambda.TooManyRequestsException"
-                                ],
-                                "IntervalSeconds": 1,
-                                "MaxAttempts": 3,
-                                "BackoffRate": 2,
-                                "JitterStrategy": "FULL"
-                            }
-                        ],
+                        "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSyntaxLambda",
                         "Next": "Check Syntax Validation Result"
                     },
                     "Check Syntax Validation Result": {
@@ -182,45 +164,64 @@ class SCPEventBridgeHandler:
                                 "Next": "Validate Semantic Policy"
                             }
                         ],
-                        "Default": "Pass"
-                    },
-                    "Pass": {
-                        "Type": "Pass", # i don't think we need this pass state
-                        "Next": "Generate Rego"
+                        "Default": "Check Retry Limit Syntax"
                     },
                     "Validate Semantic Policy": {
                         "Type": "Task",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSemanticLambda",
                         "ResultPath": "$.validationResult",
                         "Next": "Check Validation Result"
-                        },
+                    },
                     "Check Validation Result": {
                         "Type": "Choice",
                         "Choices": [
                             {
-                                "Variable": "$.validationResult.errors",
-                                "StringEquals": "",
-                                "Next": "Store Policy in S3"
+                            "Variable": "$.validationResult.errors",
+                            "StringEquals": "",
+                            "Next": "Store Policy in S3"
                             }
                         ],
-                        "Default": "Check Retry Limit"
+                        "Default": "Check Retry Limit Validation"
                     },
-                    "Check Retry Limit": {
+                    "Check Retry Limit Validation": {
                         "Type": "Choice",
                         "Choices": [
                             {
-                                "Variable": "$.counter",
-                                "NumericGreaterThanEquals": 5,
-                                "Next": "Generation Failed"
+                            "Variable": "$.counter",
+                            "NumericGreaterThanEquals": 5,
+                            "Next": "Generation Failed"
                             }
                         ],
-                        "Default": "Retry Transform"
+                        "Default": "Retry Semantic Transform"
                     },
-                    "Retry Transform": {
+                    "Check Retry Limit Syntax": {
+                        "Type": "Choice",
+                        "Choices": [
+                            {
+                            "Variable": "$.counter",
+                            "NumericGreaterThanEquals": 5,
+                            "Next": "Generation Failed"
+                            }
+                        ],
+                        "Default": "Retry Syntax Transform"
+                    },
+                    "Retry Syntax Transform": {
                         "Type": "Pass",
                         "Parameters": {
+                            "policyId.$": "$.policyId",
                             "scp.$": "$.scp",
-                            "previous_rego.$": "$.translationResult.rego",
+                            "previous_rego.$": "$.translationResult.previous_rego",
+                            "errors.$": "$.syntaxResult.errors",
+                            "counter.$": "States.MathAdd($.counter, 1)"
+                        },
+                        "Next": "Generate Rego"
+                    },
+                    "Retry Semantic Transform": {
+                        "Type": "Pass",
+                        "Parameters": {
+                            "policyId.$": "$.policyId",
+                            "scp.$": "$.scp",
+                            "previous_rego.$": "$.translationResult.previous_rego",
                             "errors.$": "$.validationResult.errors",
                             "counter.$": "States.MathAdd($.counter, 1)"
                         },
@@ -238,7 +239,7 @@ class SCPEventBridgeHandler:
                         "End": True
                     }
                 }
-                }
+            }
 
             response = self.stepfunctions_client.create_state_machine(
                 name=state_machine_name,
