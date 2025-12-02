@@ -265,10 +265,9 @@ class SCPEventBridgeHandler:
                                 'policyContent': '$.detail.requestParameters.content',
                                 'policyId': '$.detail.requestParameters.policyId',
                                 'policyName': '$.detail.requestParameters.name',
-                                'ingestionTime': '$.time',
-                                "counter": "0"
+                                'ingestionTime': '$.time'
                             },
-                            'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>}'
+                            'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>, "counter": "0"}'
                         }
                     }
                 ]
