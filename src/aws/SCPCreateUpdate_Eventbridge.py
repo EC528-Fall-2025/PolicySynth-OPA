@@ -147,6 +147,7 @@ class SCPEventBridgeHandler:
                     },
                     "Generate Rego": {
                         "Type": "Task",
+                        "ResultPath": "$.generateResult"
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "Next": "Validate Syntax Policy"
                     },
