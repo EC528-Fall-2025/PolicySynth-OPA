@@ -133,7 +133,6 @@ class SCPEventBridgeHandler:
                             "scp.$": "States.StringToJson($.policyContent)",
                             "previous_rego": "",
                             "errors": "",
-                            "counter": 0,
                             "input_data": "",
                             "query": "data.scp"
                         },
@@ -266,7 +265,8 @@ class SCPEventBridgeHandler:
                                 'policyContent': '$.detail.requestParameters.content',
                                 'policyId': '$.detail.requestParameters.policyId',
                                 'policyName': '$.detail.requestParameters.name',
-                                'ingestionTime': '$.time'
+                                'ingestionTime': '$.time',
+                                "counter": 0
                             },
                             'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>}'
                         }
