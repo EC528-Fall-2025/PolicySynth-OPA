@@ -46,16 +46,19 @@ def lambda_handler(event,context):
     try:
         # Initialize default values
         logger.debug("lambda_handler invoked with event: %s", event)
-        scp = event["scp"]
-        rego = event["previous_rego"]
-        query = "data.scp"
-        policy_id = event["policyId"]
+        scp = event.get("scp")
+        # previous_rego may be missing or an empty string; prefer it but
+        # fall back to generateResult.previous_rego when available.
+        rego = event.get("previous_rego") or (event.get("generateResult") or {}).get("previous_rego")
+        logger.debug("Resolved previous_rego present=%s", bool(rego))
+        query = event.get("query", "data.scp")
+        policy_id = event.get("policyId")
 
-        if "previous_rego" not in event:
-            logger.warning("Request missing 'previous_rego' field")
+        if not rego:
+            logger.warning("No 'previous_rego' provided (empty or missing)")
             return {
                 "scp": scp,
-                "previous_rego": rego,
+                "previous_rego": rego or "",
                 "errors": json.dumps({"error": "no rego in request"})
             }
         passed, errors = run_opa_check(rego)
