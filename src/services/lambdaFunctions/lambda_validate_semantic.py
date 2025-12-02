@@ -42,26 +42,40 @@ def _call_with_backoff(func, *args, max_retries=6, base_delay=0.5, **kwargs):
     raise Exception("Max retries exceeded for API call")
 
 
-def build_prompt(inputscp, previous_rego="", validation_errors=""): 
+def build_prompt(inputscp, previous_rego="", validation_errors="", relax_corner_cases=True): 
     # Format SCP as JSON string for better readability
     scp_str = json.dumps(inputscp, indent=2) if isinstance(inputscp, dict) else str(inputscp)
     
     prompt = f"""Compare the following SCP and Rego policy for semantic equivalence.
-Identify mismatches in allowed/denied actions, resources, and condition blocks.
-Do not rewrite the policy. Only describe errors. If there are no errors, return an empty string.
+    Identify mismatches in allowed/denied actions, resources, and condition blocks.
+    Do not rewrite the policy. Only describe errors. If there are no errors, return an empty string.
 
-SCP:
-{scp_str}
+    SCP:
+    {scp_str}
 
-Rego:
-{previous_rego if previous_rego else "(No previous Rego provided)"}
+    Rego:
+    {previous_rego if previous_rego else "(No previous Rego provided)"}
 """
-    
+    # Explicit, unambiguous instruction about corner cases
+    if relax_corner_cases:
+        prompt += """
+        Important assumptions for this comparison (DEFAULT BEHAVIOR):
+        - For this analysis, assume any context keys referenced in conditions (e.g. aws:RequestedRegion) are present and non-empty.
+        - Do NOT report mismatches that only arise from missing or empty request context attributes (corner cases) such as global services or absent aws:RequestedRegion.
+        - Focus only on direct semantic differences in allowed/denied actions, resources, and condition values as written.
+        """
+    else:
+        prompt += """
+        Strict behavior (relax_corner_cases = false):
+        - Consider and report differences that arise from missing or empty context attributes (e.g. aws:RequestedRegion absent vs present).
+        - Report any semantic divergence caused by different handling of missing/empty context keys.
+        """
+
     if validation_errors:
         prompt += f"""
-Previous validation errors (for context):
-{validation_errors}
-"""
+        Previous validation errors (for context):
+        {validation_errors}
+        """
     
     prompt += "\nOutput only the errors found, or an empty string if there are no errors."
     
@@ -90,13 +104,16 @@ def lambda_handler(event,context):
         scp = event["scp"]
         prev_rego = event.get("previous_rego","") # fetch previous rego that failed if exists
         errors = event.get("validation_errors","")
+        # allow caller to override corner-case behavior (default: True = relax corner cases)
+        relax_corner_cases = event.get("relax_corner_cases", True)
+        logger.info("relax_corner_cases=%s", relax_corner_cases)
         # Log any provided validation errors (truncated)
         if errors:
             try:
                 logger.info("Provided validation_errors: %s", str(errors)[:2000])
             except Exception:
                 logger.info("Provided validation_errors present but could not be stringified")
-        prompt = build_prompt(scp, prev_rego, errors)
+        prompt = build_prompt(scp, prev_rego, errors, relax_corner_cases)
         # Avoid logging the full prompt if it's huge; log a truncated preview
         logger.debug("Built prompt preview: %s", prompt[:2000])
 
