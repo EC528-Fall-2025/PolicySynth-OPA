@@ -200,9 +200,9 @@ class SCPEventBridgeHandler:
                         "Type": "Choice",
                         "Choices": [
                             {
-                            "Variable": "$.counter",
-                            "NumericGreaterThanEquals": 5,
-                            "Next": "Generation Failed"
+                                "Variable": "$.counter",
+                                "NumericGreaterThanEquals": 5,
+                                "Next": "Generation Failed"
                             }
                         ],
                         "Default": "Retry Syntax Transform"
@@ -211,6 +211,8 @@ class SCPEventBridgeHandler:
                         "Type": "Pass",
                         "Parameters": {
                             "policyId.$": "$.policyId",
+                            "eventName.$": "$.eventName",
+                            "policyContent.$": "$.policyContent"
                             "scp.$": "$.scp",
                             "previous_rego.$": "$.generateResult.previous_rego",
                             "errors.$": "$.syntaxResult.errors",
@@ -222,6 +224,8 @@ class SCPEventBridgeHandler:
                         "Type": "Pass",
                         "Parameters": {
                             "policyId.$": "$.policyId",
+                            "eventName.$": "$.eventName",
+                            "policyContent.$": "$.policyContent"
                             "scp.$": "$.scp",
                             "previous_rego.$": "$.generateResult.previous_rego",
                             "errors.$": "$.validationResult.errors",
