@@ -122,6 +122,7 @@ class SCPEventBridgeHandler:
                             }
                         ]
                     },
+                    # we might not need this tbh
                     "Create Transform": {
                         "Type": "Pass",
                         "Parameters": {
@@ -134,7 +135,8 @@ class SCPEventBridgeHandler:
                             "previous_rego": "",
                             "errors": "",
                             "input_data": "",
-                            "query": "data.scp"
+                            "query": "data.scp",
+                            "counter.$": "$.counter"
                         },
                         "Next": "Generate Rego"
                     },
