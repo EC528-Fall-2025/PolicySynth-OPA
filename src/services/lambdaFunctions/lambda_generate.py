@@ -76,7 +76,7 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     ## Required final rule (choose one depending on the SCP's intended semantics):
     # deny conditions
     # allow conditions
-    # decision = {"allow": allow, "deny": deny}
+    # decision = {{"allow": allow, "deny": deny}}
 
     Your output MUST include one and only one of: deny, allow, or decision.
 
@@ -91,8 +91,6 @@ def lambda_handler(event, context):
         scp = event["scp"]
         prev_rego = event.get("previous_rego","") # fetch previous rego that failed if exists
         errors = event.get("validation_errors","") ## if previous rego did not pass we need the validation errors to feed context to Claude
-        input_data = event["input_data"]
-        query = event["query"]
         if "scp" not in event:
             return {
                 "scp": scp,
@@ -122,11 +120,13 @@ def lambda_handler(event, context):
             "errors": ""
         }
     except Exception as e:
-        print(f"Error in lambda function: ", str(e))
+        import traceback
+        traceback_str = traceback.format_exc()
+        print(f"Error in lambda function: ", traceback_str)
         return {
             "scp":scp,
             "previous_rego":prev_rego,
-            "errors": "Error in lambda function generate"
+            "errors": f"Error in lambda function generate: {str(e)}"
         }
 
 
