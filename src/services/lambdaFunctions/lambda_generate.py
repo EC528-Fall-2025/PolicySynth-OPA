@@ -1,7 +1,8 @@
-import json 
 import boto3
-import os
 import re
+import random
+import time
+from botocore.exceptions import ClientError, BotoCoreError, EndpointConnectionError
 
 # takes SCP Json as input, feeds to Claude with prompt and spits out rego policy 
 # creates bedrock client to connect to claude 
@@ -10,6 +11,32 @@ client = boto3.client("bedrock-runtime", region_name = "us-east-1")
 # set model id
 #model_id = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 model_id = "global.anthropic.claude-sonnet-4-5-20250929-v1:0" # have to use the cross-region inference profile ID instead for this model
+
+def _call_with_backoff(func, *args, max_retries=6, base_delay=0.5, **kwargs):
+    for attempt in range(1, max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("ThrottlingException", "TooManyRequestsException", "Throttling"):
+                headers = e.response.get("ResponseMetadata", {}).get("HTTPHeaders", {}) or {}
+                ra = headers.get("retry-after") or headers.get("Retry-After")
+                if ra:
+                    try:
+                        sleep = float(ra)
+                    except Exception:
+                        sleep = random.uniform(0, base_delay * (2 ** (attempt - 1)))
+                else:
+                    sleep = random.uniform(0, base_delay * (2 ** (attempt - 1)))
+                time.sleep(sleep)
+                continue
+            raise
+        except (BotoCoreError, EndpointConnectionError):
+            sleep = random.uniform(0, base_delay * (2 ** (attempt - 1)))
+            time.sleep(sleep)
+            continue
+    raise Exception("Max retries exceeded for API call")
+
 
 # build prompt creates general prompt for LLM with inputscp, previous rego, and validation errors if applicable. 
 def build_prompt(inputSCP, previous_rego="", validation_errors=""): 
@@ -75,14 +102,15 @@ def lambda_handler(event, context):
         # build prompt with args
         prompt = build_prompt(scp, prev_rego, errors)
         # call claude passing arguments
-        response = client.converse(
+        response = _call_with_backoff(
+            client.converse,
             modelId=model_id,
             messages=[{
                 "role": "user",
                 "content": [{"text": prompt}] # pass in prompt here
             }],
             inferenceConfig={
-                "maxTokens":8192 # max length of response 
+                "maxTokens":8192 # max length of response
             }
         )
         content = response["output"]["message"]["content"]
