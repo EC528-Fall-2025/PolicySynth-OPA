@@ -147,7 +147,7 @@ class SCPEventBridgeHandler:
                     },
                     "Generate Rego": {
                         "Type": "Task",
-                        "ResultPath": "$.generateResult"
+                        "ResultPath": "$.generateResult",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "Next": "Validate Syntax Policy"
                     },
@@ -270,7 +270,7 @@ class SCPEventBridgeHandler:
                                 'policyName': '$.detail.requestParameters.name',
                                 'ingestionTime': '$.time'
                             },
-                            'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>, "counter": "0"}'
+                            'InputTemplate': '{"eventName": <eventName>, "policyContent": <policyContent>, "policyId": <policyId>, "policyName": <policyName>, "timestamp": <ingestionTime>, "counter": 0}'
                         }
                     }
                 ]
