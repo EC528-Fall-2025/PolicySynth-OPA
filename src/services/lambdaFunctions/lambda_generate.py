@@ -40,7 +40,7 @@ def _call_with_backoff(func, *args, max_retries=6, base_delay=0.5, **kwargs):
 
 # build prompt creates general prompt for LLM with inputscp, previous rego, and validation errors if applicable. 
 def build_prompt(inputSCP, previous_rego="", validation_errors=""): 
-    prompt = f"""
+    template = """
     <<CONTEXT>> 
     You are an expert in AWS IAM, Service Control Policies (SCPs), and OPA Rego.
 
@@ -49,16 +49,16 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     conditions, and semantics.
 
     INPUT SCP JSON:
-    {inputSCP}
+    {scp}
 
     If validation errors are provided, they describe how the previous Rego output
     failed semantically or syntactically. Use them to improve/fix the next version.
 
     PREVIOUS REGO (if any):
-    {previous_rego}
+    {prev_rego}
 
     VALIDATION ERRORS (if any):
-    {validation_errors}
+    {errors}
 
     REQUIREMENTS:
     1. Output ONLY raw Rego code - DO NOT wrap it in markdown code fences or backticks.
@@ -72,11 +72,17 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
     6. The output MUST define the following required entrypoint so it can be evaluated by another Lambda:
     THE PACKAGE NAME MUST ALWAYS BE EXACTLY:
     package scp
+    7. IMPORTANT (OPA syntax compatibility): Target the OPA binary used by the validator which requires the `if` keyword for rule bodies. Produce rules in one of these compatible forms (examples):
+       - Boolean rule using `if`:
+         deny = true if input.Action and input.Resource and not is_approved_region
+       - Headless rule with `if`:
+         deny if input.Action and input.Resource and not is_approved_region {{ }}
+       If you prefer block style, use the `if` form consistently so the policy parses with the validator's OPA version.
 
     ## Required final rule (choose one depending on the SCP's intended semantics):
     # deny conditions
     # allow conditions
-    # decision = {{"allow": allow, "deny": deny}}
+    # decision = {{ "allow": allow, "deny": deny }}
 
     Your output MUST include one and only one of: deny, allow, or decision.
 
@@ -85,7 +91,10 @@ def build_prompt(inputSCP, previous_rego="", validation_errors=""):
 
     BEGIN OUTPUT (Rego only, no markdown):
     """
-    return prompt  
+    prompt = template.format(scp=inputSCP, prev_rego=previous_rego, errors=validation_errors)
+    return prompt
+
+
 def lambda_handler(event, context): 
     try: 
         scp = event["scp"]
@@ -94,7 +103,8 @@ def lambda_handler(event, context):
         if "scp" not in event:
             return {
                 "scp": scp,
-                "previous_rego":prev_rego, 
+                "previous_rego": prev_rego,
+                "generated_rego": "",
                 "errors": "Missing SCP in event"
             }
         # build prompt with args
@@ -116,7 +126,7 @@ def lambda_handler(event, context):
         rego_output = strip_fenced_code(rego_output)
         return {
             "scp": scp, 
-            "previous_rego": rego_output,
+            "generated_rego": rego_output,
             "errors": ""
         }
     except Exception as e:
@@ -124,8 +134,9 @@ def lambda_handler(event, context):
         traceback_str = traceback.format_exc()
         print(f"Error in lambda function: ", traceback_str)
         return {
-            "scp":scp,
-            "previous_rego":prev_rego,
+            "scp": scp,
+            "previous_rego": prev_rego,
+            "generated_rego": "",
             "errors": f"Error in lambda function generate: {str(e)}"
         }
 
