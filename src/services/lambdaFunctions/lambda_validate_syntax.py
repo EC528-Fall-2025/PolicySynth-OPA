@@ -47,18 +47,18 @@ def lambda_handler(event,context):
         # Initialize default values
         logger.debug("lambda_handler invoked with event: %s", event)
         scp = event.get("scp")
-        # previous_rego may be missing or an empty string; prefer it but
-        # fall back to generateResult.previous_rego when available.
-        rego = event.get("previous_rego") or (event.get("generateResult") or {}).get("previous_rego")
-        logger.debug("Resolved previous_rego present=%s", bool(rego))
+        # generated_rego may be missing or an empty string; prefer it but
+        # fall back to generateResult.generated_rego when available.
+        rego = (event.get("generateResult") or {}).get("generated_rego")
+        logger.debug("Resolved generated_rego present=%s", bool(rego))
         query = event.get("query", "data.scp")
         policy_id = event.get("policyId")
 
         if not rego:
-            logger.warning("No 'previous_rego' provided (empty or missing)")
+            logger.warning("No 'generated_rego' provided (empty or missing)")
             return {
                 "scp": scp,
-                "previous_rego": rego or "",
+                "generated_rego": rego or "",
                 "errors": json.dumps({"error": "no rego in request"})
             }
         passed, errors = run_opa_check(rego)
@@ -69,7 +69,7 @@ def lambda_handler(event,context):
                 logger.warning("No input data available for opa eval for policy_id=%s", policy_id)
                 return {
                     "scp": scp,
-                    "previous_rego": rego,
+                    "generated_rego": rego,
                     "errors": json.dumps({"error": "no input data"})
                 }
             eval_passed, eval_result = run_opa_eval(rego, input_data, query)
@@ -77,7 +77,7 @@ def lambda_handler(event,context):
             if eval_passed:
                 return {
                     "scp": scp,
-                    "previous_rego": rego,
+                    "generated_rego": rego,
                     "result": json.dumps(eval_result) if isinstance(eval_result, dict) else str(eval_result),
                     "errors": ""
                 }
@@ -85,7 +85,7 @@ def lambda_handler(event,context):
                 logger.error("OPA eval failed for policy_id=%s: %s", policy_id, eval_result)
                 return {
                     "scp": scp,
-                    "previous_rego": rego,
+                    "generated_rego": rego,
                     "errors": json.dumps({"error": "opa eval failed", "details": str(eval_result)})
                 }
         else:
@@ -94,14 +94,14 @@ def lambda_handler(event,context):
             logger.error("OPA syntax check failed for policy_id=%s: %s", policy_id, errors)
             return {
                 "scp": scp,
-                "previous_rego": rego,
+                "generated_rego": rego,
                 "errors": errors_str
             }
     except Exception as e:
         logger.exception("Error in lambda_validate_syntax: %s", str(e))
         return {
             "scp": scp,
-            "previous_rego": rego,
+            "generated_rego": rego,
             "errors": json.dumps({"error": f"Exception in syntax validation: {str(e)}"})
         }
 
