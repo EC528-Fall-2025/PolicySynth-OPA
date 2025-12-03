@@ -147,12 +147,20 @@ class SCPEventBridgeHandler:
                     },
                     "Generate Rego": {
                         "Type": "Task",
+                        "ResultSelector": {
+                            "generated_rego.$": "$.generated_rego",
+                            "errors.$": "$.errors"
+                        },
                         "ResultPath": "$.generateResult",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:generateLambda",
                         "Next": "Validate Syntax Policy"
                     },
                     "Validate Syntax Policy": {
                         "Type": "Task",
+                        "ResultSelector": {
+                            "generated_rego.$": "$.generated_rego",
+                            "errors.$": "$.errors"
+                        },
                         "ResultPath": "$.syntaxResult",
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSyntaxLambda",
                         "Next": "Check Syntax Validation Result"
@@ -170,6 +178,11 @@ class SCPEventBridgeHandler:
                     },
                     "Validate Semantic Policy": {
                         "Type": "Task",
+                        "ResultSelector": {
+                            "stopReason.$": "$.stopReason",
+                            "usage.$": "$.usage",
+                            "errors.$": "$.errors"
+                        },
                         "Resource": "arn:aws:lambda:us-east-1:973646735135:function:validateSemanticLambda",
                         "ResultPath": "$.validationResult",
                         "Next": "Check Validation Result"
@@ -212,9 +225,9 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "policyId.$": "$.policyId",
                             "eventName.$": "$.eventName",
-                            "policyContent.$": "$.policyContent"
+                            "policyContent.$": "$.policyContent",
                             "scp.$": "$.scp",
-                            "previous_rego.$": "$.generateResult.previous_rego",
+                            "previous_rego.$": "$.generateResult.generated_rego",
                             "errors.$": "$.syntaxResult.errors",
                             "counter.$": "States.MathAdd($.counter, 1)"
                         },
@@ -225,9 +238,9 @@ class SCPEventBridgeHandler:
                         "Parameters": {
                             "policyId.$": "$.policyId",
                             "eventName.$": "$.eventName",
-                            "policyContent.$": "$.policyContent"
+                            "policyContent.$": "$.policyContent",
                             "scp.$": "$.scp",
-                            "previous_rego.$": "$.generateResult.previous_rego",
+                            "previous_rego.$": "$.generateResult.generated_rego",
                             "errors.$": "$.validationResult.errors",
                             "counter.$": "States.MathAdd($.counter, 1)"
                         },
