@@ -194,9 +194,24 @@ class SCPEventBridgeHandler:
                                 "Variable": "$.validationResult.errors",
                                 "StringEquals": "",
                                 "Next": "Store Policy in S3"
+                            },
+                            {
+                                "Variable": "$.validationResult.terraform_non_compliant",
+                                "StringEquals": "true",
+                                "Next": "Notify Noncompliance"
                             }
                         ],
                         "Default": "Check Retry Limit Validation"
+                    },
+                    "Notify Noncompliance": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::sns:publish",
+                        "Parameters": {
+                            "TopicArn": "arn:aws:sns:us-east-1:973646735135:SendTerraformViolationEmail",
+                            "Message.$": "States.Format('Current Terraform violates SCP Policy ID:{}. Errors: {}', $.policyId, $.validationResult.errors)",
+                            "Subject": "Terraform SCP non-compliance detected"
+                        },
+                        "Next": "Generation Failed"
                     },
                     "Check Retry Limit Validation": {
                         "Type": "Choice",
