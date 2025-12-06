@@ -8,6 +8,7 @@ import traceback
 import os
 import subprocess
 import tempfile
+import re
 
 client = boto3.client("bedrock-runtime", region_name = "us-east-1")
 s3 = boto3.client("s3")
@@ -25,6 +26,20 @@ ENABLE_TERRAFORM_EVAL = os.getenv("ENABLE_TERRAFORM_EVAL", "true").lower() == "t
 # Terraform test plans (pass/fail suites)
 TERRAFORM_TESTS_BUCKET = os.getenv("TERRAFORM_TESTS_BUCKET", TERRAFORM_PLAN_BUCKET)
 TERRAFORM_TESTS_PREFIX = os.getenv("TERRAFORM_TESTS_PREFIX", "terraform-tests")
+
+def strip_fenced_code(text): 
+    """Remove markdown code fences from LLM output"""
+    if not text:
+        return text
+    text = text.strip()
+    
+    pattern = r"```(?:\w+)?\s*\n(.*?)```"
+    match = re.search(pattern, text, re.DOTALL)
+
+    if match:
+        return match.group(1).strip()
+
+    return text.strip()
 
 def _call_with_backoff(func, *args, max_retries=6, base_delay=0.5, **kwargs):
     logger = logging.getLogger(__name__)
@@ -99,6 +114,58 @@ def build_prompt(inputscp, previous_rego="", validation_errors="", relax_corner_
         'Do NOT add any additional commentary, explanation, or extra formatting.\n'
     )    
     return prompt
+
+def build_terraform_rego_from_scp(scp: dict) -> str:
+    """
+    For region guardrails like DenyAllExceptApprovedRegions:
+      Effect: Deny
+      Condition.StringNotEquals["aws:RequestedRegion"] = [approved regions]
+
+    Generate Terraform-aware Rego using Rego v1 syntax:
+      - function heads use `if`
+      - partial set uses `contains` in the head
+    """
+    statements = scp.get("Statement", [])
+    approved_regions = []
+
+    for st in statements:
+        cond = st.get("Condition", {})
+        string_not_equals = cond.get("StringNotEquals", {})
+        regions = string_not_equals.get("aws:RequestedRegion")
+        if regions:
+            approved_regions = regions
+            break
+
+    # If we can't recognize a region-based SCP, return a no-op policy
+    if not approved_regions:
+        return """package scp
+
+deny := []
+"""
+
+    lines = []
+    lines.append("package scp")
+    lines.append("")
+    lines.append("# true if region is in the approved list")
+
+    # allowed_region(region) if { region == "us-east-1" }
+    for r in approved_regions:
+        lines.append(f'allowed_region(region) if {{')
+        lines.append(f'  region == "{r}"')
+        lines.append("}")
+    lines.append("")
+
+    # Partial-set deny rule in new syntax: deny contains reason if { ... }
+    lines.append("deny contains reason if {")
+    lines.append("  some provider_name")
+    lines.append("  pc := input.configuration.provider_config[provider_name]")
+    lines.append("  region := pc.expressions.region.constant_value")
+    lines.append("  not allowed_region(region)")
+    lines.append('  reason := sprintf("provider %v uses disallowed region %v", [provider_name, region])')
+    lines.append("}")
+
+    return "\n".join(lines)
+
 
 def fetch_terraform_plan():
     """
@@ -259,6 +326,7 @@ def opa_eval_terraform_for_violations(rego_code: str, terraform_plan_json: str, 
                 except Exception:
                     logger.debug("Failed to remove temp file %s", tmp)
 
+
 def run_terraform_test_suite(rego_code: str):
     """
     Run the generated Rego against all Terraform test plans in S3.
@@ -267,7 +335,11 @@ def run_terraform_test_suite(rego_code: str):
     For keys under .../fail/... we expect AT LEAST ONE violation.
 
     Returns:
-      (all_ok: bool, error_message: str)
+        (all_ok: bool, error_message: str, terraform_non_compliant: bool)
+
+    The third value is True only when OPA evaluation completes successfully
+    but exposes non-compliant behavior (violations present when they should
+    not be, or violations missing when they should exist).
     """
     logger = logging.getLogger(__name__)
 
@@ -286,16 +358,20 @@ def run_terraform_test_suite(rego_code: str):
                 rego_code, tf_plan, TERRAFORM_PLAN_QUERY
             )
             if not ok:
-                return False, err
-            # In fallback mode we don't assert anything about violations;
-            # we only care that the eval runs successfully.
-            return True, ""
+                return False, err, False
+            if violations:
+                msg = (
+                    f"Fallback Terraform eval reported {len(violations)} violation(s)"
+                )
+                return False, msg[:2000], True
+            return True, "", False
         except Exception as e:
             logger.exception("Exception during fallback Terraform eval: %s", str(e))
-            return False, f"Fallback Terraform eval failed: {str(e)}"
+            return False, f"Fallback Terraform eval failed: {str(e)}", False
 
     problems = []
     all_ok = True
+    terraform_non_compliant = False
 
     # Check PASS plans: expect NO violations
     for key in pass_keys:
@@ -308,6 +384,7 @@ def run_terraform_test_suite(rego_code: str):
             problems.append(f"{key}: eval error: {err}")
         elif violations:
             all_ok = False
+            terraform_non_compliant = True
             problems.append(
                 f"{key}: expected NO violations, but got {len(violations)}"
             )
@@ -323,18 +400,19 @@ def run_terraform_test_suite(rego_code: str):
             problems.append(f"{key}: eval error: {err}")
         elif not violations:
             all_ok = False
+            terraform_non_compliant = True
             problems.append(
                 f"{key}: expected violations, but got none"
             )
 
     if all_ok:
         logger.info("All Terraform semantic tests passed.")
-        return True, ""
+        return True, "", False
     else:
         msg = " ; ".join(problems)
         logger.error("Terraform semantic tests failed: %s", msg)
         # Truncate in case it gets huge
-        return False, msg[:2000]
+        return False, msg[:2000], terraform_non_compliant
 
 def lambda_handler(event,context): 
     try: 
@@ -349,6 +427,9 @@ def lambda_handler(event,context):
 
         logger.info("lambda_handler invoked")
         logger.info("Incoming event: %s", json.dumps(event, default=str))
+
+        terraform_non_compliant = False
+        terraform_non_compliance_details = ""
 
         if "scp" not in event:
             logger.error("Missing 'scp' in request payload")
@@ -366,14 +447,11 @@ def lambda_handler(event,context):
         # Prefer generated rego from pipeline if present
         generate_result = event.get("generateResult") or {}
         generated_rego = generate_result.get("generated_rego") or prev_rego
-
-        # TEMP: override for demo SCP DenyAllExceptApprovedRegions
-        statements = scp.get("Statement", [])
-        if any(st.get("Sid") == "DenyAllExceptApprovedRegions" for st in statements):
-          logger.info("Overriding generated_rego with Terraform-aware template for DenyAllExceptApprovedRegions")
-          generated_rego = "package scp\n\nallowed_regions = [\"us-east-1\", \"us-west-2\", \"eu-west-1\"]\n\nregion_in_allowed_regions(region) if {\n  some i\n  allowed_regions[i] == region\n}\n\ndeny contains reason if {\n  some provider_name\n  pc := input.configuration.provider_config[provider_name]\n  region := pc.expressions.region.constant_value\n  not region_in_allowed_regions(region)\n  reason := sprintf(\"provider %v uses disallowed region %v\", [provider_name, region])\n}\n"
-          
         logger.info("generated_rego length: %s", len(generated_rego) if generated_rego else 0)
+        logger.info("generated_rego content (truncated): %s", (generated_rego[:200] if generated_rego else "None"))
+
+        # not using claude to generate terraform rego
+        terraform_rego = build_terraform_rego_from_scp(scp)
         logger.info("generated_rego content (truncated): %s", (generated_rego[:200] if generated_rego else "None"))
 
         if not generated_rego:
@@ -426,13 +504,15 @@ def lambda_handler(event,context):
         logger.info("errors value before Terraform eval: %r", errors)
 
         # Terraform OPA eval. Only run if: terraform eval is enabled, Claude found no semantic errors, we have Rego code to eval
-        if ENABLE_TERRAFORM_EVAL and errors == "" and generated_rego:
+        if ENABLE_TERRAFORM_EVAL and errors == "" and terraform_rego:
             logger.info(
                 "ENABLE_TERRAFORM_EVAL is true and no Claude errors; "
                 "running Terraform semantic test suite."
             )
             try:
-                passed, tf_err = run_terraform_test_suite(generated_rego)
+                passed, tf_err, tf_non_compliant = run_terraform_test_suite(terraform_rego)
+                terraform_non_compliant = bool(tf_non_compliant)
+                terraform_non_compliance_details = tf_err
                 if not passed:
                     # Treat this as a semantic validation failure so Step Functions will retry/regenerate.
                     logger.error("Terraform semantic tests failed: %s", tf_err)
@@ -449,17 +529,25 @@ def lambda_handler(event,context):
                     errors = f"Terraform eval exception: {str(e)}\n\n{errors}"
                 else:
                     errors = f"Terraform eval exception: {str(e)}"
+                terraform_non_compliant = False
+                terraform_non_compliance_details = str(e)
 
         # if there are no errors then errors is set to nothing and therefore passes 
         logger.info("ENABLE_TERRAFORM_EVAL evaluated as: %s", ENABLE_TERRAFORM_EVAL)
 
+        # terraform is compliant iff there are no errors
+        # and if the terraform_non_compliant flag from the test suite is false
+        terraform_non_compliant = terraform_non_compliant or (errors != "")
         return {
             "statusCode": 200,
             "scp": scp,
+            "generated_rego": generated_rego,
             "previous_rego": prev_rego,
             "stopReason": response.get("stopReason"),
             "usage": response.get("usage", {}),
-            "errors": errors
+            "errors": errors,
+            "terraform_non_compliant": terraform_non_compliant,
+            "terraform_non_compliance_details": terraform_non_compliance_details
         }
     except Exception as e:
         # Log full stack trace to CloudWatch logs for debugging
