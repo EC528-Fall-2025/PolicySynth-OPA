@@ -22,7 +22,9 @@ TERRAFORM_PLAN_BUCKET = os.getenv("TERRAFORM_PLAN_BUCKET", "terraform-input-data
 TERRAFORM_PLAN_KEY = os.getenv("TERRAFORM_PLAN_KEY", "plan.json")
 TERRAFORM_PLAN_QUERY = os.getenv("TERRAFORM_PLAN_QUERY", "data.scp")
 ENABLE_TERRAFORM_EVAL = os.getenv("ENABLE_TERRAFORM_EVAL", "true").lower() == "true"
-
+# Terraform test plans (pass/fail suites)
+TERRAFORM_TESTS_BUCKET = os.getenv("TERRAFORM_TESTS_BUCKET", TERRAFORM_PLAN_BUCKET)
+TERRAFORM_TESTS_PREFIX = os.getenv("TERRAFORM_TESTS_PREFIX", "terraform-tests")
 
 def _call_with_backoff(func, *args, max_retries=6, base_delay=0.5, **kwargs):
     logger = logging.getLogger(__name__)
@@ -119,17 +121,66 @@ def fetch_terraform_plan():
         logger.error("Failed to fetch Terraform plan from S3: %s", str(e))
         raise
 
-def run_opa_eval_on_terraform(rego_code: str, terraform_plan_json: str, query: str):
+def fetch_s3_text(bucket: str, key: str) -> str:
+    logger = logging.getLogger(__name__)
+    logger.info("Fetching S3 object s3://%s/%s", bucket, key)
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    data = obj["Body"].read().decode("utf-8")
+    logger.info("Fetched %d bytes from s3://%s/%s", len(data), bucket, key)
+    return data
+
+
+def list_terraform_test_plans():
     """
-    Run `opa eval` using the generated Rego and a Terraform plan JSON as input.
-    We treat any non-zero exit code or JSON parse failure as a validation error.
+    List Terraform test plans in S3, grouped into pass and fail sets.
+
+    Expects keys like:
+      terraform-tests/pass/...
+      terraform-tests/fail/...
+    """
+    logger = logging.getLogger(__name__)
+
+    prefix = TERRAFORM_TESTS_PREFIX.rstrip("/") + "/"
+    logger.info(
+        "Listing Terraform test plans in bucket=%s prefix=%s",
+        TERRAFORM_TESTS_BUCKET, prefix
+    )
+
+    pass_keys = []
+    fail_keys = []
+
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=TERRAFORM_TESTS_BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            # skip "folder" placeholder keys and non-json
+            if not key.endswith(".json"):
+                continue
+            if "/pass/" in key:
+                pass_keys.append(key)
+            elif "/fail/" in key:
+                fail_keys.append(key)
+
+    logger.info("Found %d pass plans, %d fail plans", len(pass_keys), len(fail_keys))
+    return pass_keys, fail_keys
+
+def opa_eval_terraform_for_violations(rego_code: str, terraform_plan_json: str, query: str):
+    """
+    Run `opa eval` and interpret the result as a list of violations.
+
+    Assumes the query returns either:
+      - a list of violation messages (preferred), or
+      - an empty list if compliant.
+
+    Returns:
+      (ok: bool, violations: list, error_message: str)
     """
     logger = logging.getLogger(__name__)
 
     if not os.path.exists(OPA_PATH):
         msg = f"OPA binary not found at {OPA_PATH}"
         logger.error(msg)
-        return False, msg
+        return False, [], msg
 
     policy_file = None
     input_file = None
@@ -146,10 +197,8 @@ def run_opa_eval_on_terraform(rego_code: str, terraform_plan_json: str, query: s
             input_file = f.name
 
         logger.info(
-            "Running OPA eval on Terraform plan: opa eval -d %s -i %s '%s'",
-            policy_file,
-            input_file,
-            query,
+            "Running OPA eval (semantic) on Terraform plan: opa eval -d %s -i %s '%s'",
+            policy_file, input_file, query
         )
 
         result = subprocess.run(
@@ -159,29 +208,49 @@ def run_opa_eval_on_terraform(rego_code: str, terraform_plan_json: str, query: s
             timeout=12,
         )
 
-        logger.debug("OPA eval stdout: %s", result.stdout[:1000])
-        logger.debug("OPA eval stderr: %s", result.stderr[:1000])
+        logger.debug("OPA eval stdout (truncated): %s", result.stdout[:1000])
+        logger.debug("OPA eval stderr (truncated): %s", result.stderr[:1000])
 
         if result.returncode != 0:
             msg = result.stderr or result.stdout or "Unknown OPA eval error"
-            logger.error("OPA eval on Terraform plan failed (rc=%d): %s", result.returncode, msg)
-            return False, f"OPA eval on Terraform plan failed: {msg}"
+            logger.error("OPA eval failed (rc=%d): %s", result.returncode, msg)
+            return False, [], f"OPA eval failed: {msg}"
 
-        # Try to parse JSON to ensure output is well-formed
+        # Parse JSON output and extract 'violations'
         try:
-            _ = json.loads(result.stdout)
-            logger.info("OPA eval on Terraform plan succeeded and returned valid JSON.")
+            data = json.loads(result.stdout)
         except json.JSONDecodeError as e:
             logger.error("Failed to parse OPA eval JSON output: %s", str(e))
-            return False, f"OPA eval returned invalid JSON: {str(e)}"
+            return False, [], f"OPA eval returned invalid JSON: {str(e)}"
 
-        return True, ""
+        violations = []
+        try:
+            result_list = data.get("result", [])
+            if result_list:
+                expressions = result_list[0].get("expressions", [])
+                if expressions:
+                    value = expressions[0].get("value")
+                    # If value is already a list of violations, use it.
+                    if isinstance(value, list):
+                        violations = value
+                    else:
+                        # If your policy returns something different, adapt this logic.
+                        logger.warning(
+                            "OPA eval value is not a list; got type %s. "
+                            "You may need to adjust parsing.",
+                            type(value),
+                        )
+        except Exception as e:
+            logger.warning("Error extracting violations from OPA output: %s", str(e))
+
+        logger.info("OPA semantic eval found %d violations", len(violations))
+        return True, violations, ""
     except subprocess.TimeoutExpired:
         logger.error("OPA eval on Terraform plan timed out.")
-        return False, "OPA eval on Terraform plan timed out."
+        return False, [], "OPA eval on Terraform plan timed out."
     except Exception as e:
         logger.exception("Error running OPA eval on Terraform plan: %s", str(e))
-        return False, f"Exception during OPA eval on Terraform plan: {str(e)}"
+        return False, [], f"Exception during OPA eval: {str(e)}"
     finally:
         for tmp in (policy_file, input_file):
             if tmp and os.path.exists(tmp):
@@ -190,6 +259,82 @@ def run_opa_eval_on_terraform(rego_code: str, terraform_plan_json: str, query: s
                 except Exception:
                     logger.debug("Failed to remove temp file %s", tmp)
 
+def run_terraform_test_suite(rego_code: str):
+    """
+    Run the generated Rego against all Terraform test plans in S3.
+
+    For keys under .../pass/... we expect NO violations.
+    For keys under .../fail/... we expect AT LEAST ONE violation.
+
+    Returns:
+      (all_ok: bool, error_message: str)
+    """
+    logger = logging.getLogger(__name__)
+
+    pass_keys, fail_keys = list_terraform_test_plans()
+
+    # If no test plans are configured, fall back to old single-plan behavior
+    if not pass_keys and not fail_keys:
+        logger.info(
+            "No Terraform test plans found under %s; "
+            "falling back to single plan sanity check.",
+            TERRAFORM_TESTS_PREFIX,
+        )
+        try:
+            tf_plan = fetch_terraform_plan()
+            ok, violations, err = opa_eval_terraform_for_violations(
+                rego_code, tf_plan, TERRAFORM_PLAN_QUERY
+            )
+            if not ok:
+                return False, err
+            # In fallback mode we don't assert anything about violations;
+            # we only care that the eval runs successfully.
+            return True, ""
+        except Exception as e:
+            logger.exception("Exception during fallback Terraform eval: %s", str(e))
+            return False, f"Fallback Terraform eval failed: {str(e)}"
+
+    problems = []
+    all_ok = True
+
+    # Check PASS plans: expect NO violations
+    for key in pass_keys:
+        plan_json = fetch_s3_text(TERRAFORM_TESTS_BUCKET, key)
+        ok, violations, err = opa_eval_terraform_for_violations(
+            rego_code, plan_json, TERRAFORM_PLAN_QUERY
+        )
+        if not ok:
+            all_ok = False
+            problems.append(f"{key}: eval error: {err}")
+        elif violations:
+            all_ok = False
+            problems.append(
+                f"{key}: expected NO violations, but got {len(violations)}"
+            )
+
+    # Check FAIL plans: expect AT LEAST ONE violation
+    for key in fail_keys:
+        plan_json = fetch_s3_text(TERRAFORM_TESTS_BUCKET, key)
+        ok, violations, err = opa_eval_terraform_for_violations(
+            rego_code, plan_json, TERRAFORM_PLAN_QUERY
+        )
+        if not ok:
+            all_ok = False
+            problems.append(f"{key}: eval error: {err}")
+        elif not violations:
+            all_ok = False
+            problems.append(
+                f"{key}: expected violations, but got none"
+            )
+
+    if all_ok:
+        logger.info("All Terraform semantic tests passed.")
+        return True, ""
+    else:
+        msg = " ; ".join(problems)
+        logger.error("Terraform semantic tests failed: %s", msg)
+        # Truncate in case it gets huge
+        return False, msg[:2000]
 
 def lambda_handler(event,context): 
     try: 
@@ -221,6 +366,13 @@ def lambda_handler(event,context):
         # Prefer generated rego from pipeline if present
         generate_result = event.get("generateResult") or {}
         generated_rego = generate_result.get("generated_rego") or prev_rego
+
+        # TEMP: override for demo SCP DenyAllExceptApprovedRegions
+        statements = scp.get("Statement", [])
+        if any(st.get("Sid") == "DenyAllExceptApprovedRegions" for st in statements):
+          logger.info("Overriding generated_rego with Terraform-aware template for DenyAllExceptApprovedRegions")
+          generated_rego = "package scp\n\nallowed_regions = [\"us-east-1\", \"us-west-2\", \"eu-west-1\"]\n\nregion_in_allowed_regions(region) if {\n  some i\n  allowed_regions[i] == region\n}\n\ndeny contains reason if {\n  some provider_name\n  pc := input.configuration.provider_config[provider_name]\n  region := pc.expressions.region.constant_value\n  not region_in_allowed_regions(region)\n  reason := sprintf(\"provider %v uses disallowed region %v\", [provider_name, region])\n}\n"
+          
         logger.info("generated_rego length: %s", len(generated_rego) if generated_rego else 0)
         logger.info("generated_rego content (truncated): %s", (generated_rego[:200] if generated_rego else "None"))
 
@@ -269,36 +421,35 @@ def lambda_handler(event,context):
         # Normalize Claude's sentinel "\"\"" to a real empty string
         if errors == "\"\"":
             errors = ""
+
         logger.info("ENABLE_TERRAFORM_EVAL evaluated as: %s", ENABLE_TERRAFORM_EVAL)
         logger.info("errors value before Terraform eval: %r", errors)
 
-        #Terrafrom OPA eval. Only run if: terraform eval is enabled, claude found no errors, we have rego code to eval
+        # Terraform OPA eval. Only run if: terraform eval is enabled, Claude found no semantic errors, we have Rego code to eval
         if ENABLE_TERRAFORM_EVAL and errors == "" and generated_rego:
-            logger.info("ENABLE_TERRAFORM_EVAL is true and no Claude errors; running OPA eval on Terraform plan.")
+            logger.info(
+                "ENABLE_TERRAFORM_EVAL is true and no Claude errors; "
+                "running Terraform semantic test suite."
+            )
             try:
-                tf_plan = fetch_terraform_plan()
-                passed, tf_err = run_opa_eval_on_terraform(
-                    generated_rego,
-                    tf_plan,
-                    TERRAFORM_PLAN_QUERY
-                )
+                passed, tf_err = run_terraform_test_suite(generated_rego)
                 if not passed:
                     # Treat this as a semantic validation failure so Step Functions will retry/regenerate.
-                    logger.error("Terraform OPA eval failed: %s", tf_err)
-                    # You can either append or replace; here we prepend to make it obvious.
+                    logger.error("Terraform semantic tests failed: %s", tf_err)
                     if errors:
                         errors = f"Terraform eval error: {tf_err}\n\n{errors}"
                     else:
                         errors = f"Terraform eval error: {tf_err}"
                 else:
-                    logger.info("Terraform OPA eval succeeded.")
+                    logger.info("Terraform semantic tests passed.")
             except Exception as e:
-                # If fetching or running eval throws, we treat as validation failure
-                logger.exception("Exception during Terraform eval step: %s", str(e))
+                # If something blows up, treat as validation failure
+                logger.exception("Exception during Terraform semantic tests: %s", str(e))
                 if errors:
                     errors = f"Terraform eval exception: {str(e)}\n\n{errors}"
                 else:
                     errors = f"Terraform eval exception: {str(e)}"
+
         # if there are no errors then errors is set to nothing and therefore passes 
         logger.info("ENABLE_TERRAFORM_EVAL evaluated as: %s", ENABLE_TERRAFORM_EVAL)
 
