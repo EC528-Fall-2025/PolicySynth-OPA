@@ -1,0 +1,32 @@
+{
+    "Comment": "SNS testing",
+    "StartAt": "Choice",
+    "States": {
+      "Choice": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.sendEmail",
+            "StringEquals": "true",
+            "Next": "PublishToSNS"
+          }
+        ],
+        "Default": "EndState"
+      },
+      "PublishToSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "TopicArn": "${SNSStateMachineTopicArn}",
+          "Message": "Current Terraform violates SCP Policy ID: 123. Errors: this is just a test",
+          "Subject": "Terraform SCP non-compliance detected"
+        },
+        "End": true
+      },
+      "EndState": {
+        "Type": "Pass",
+        "Result": "No email sent",
+        "End": true
+      }
+    }
+  }
