@@ -6,6 +6,11 @@
 - Demo 3: https://drive.google.com/file/d/1i2ixh5NtVLBPdyAURwqlz1MEpwqTl0hF/view?usp=sharing
 - Demo 4: https://drive.google.com/file/d/1UcPAdQlo7Vls6lWg4QGrD5iG5covGmo1/view?usp=sharing
 - Demo 5: https://drive.google.com/file/d/1HAM6G4cx6-wgGPxNykp6iD6AFSd5dq0E/view?usp=sharing
+- 
+
+**Instructions** 
+======================================
+Please navigate to PolicySynthApp README.md for installation + deployment instructions and pre-requisites. 
 
 **Vision and Goals of the Project:**
 ======================================
