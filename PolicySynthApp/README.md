@@ -154,20 +154,18 @@ The next SCP validation will use your updated plan automatically.
 
 ## Additional Commands
 
-**Build locally:**
+**Build locally (need docker open):**
 ```bash
 sam build --use-container
+```
+or 
+```bash
+sam build
 ```
 
 **View logs:**
 ```bash
 sam logs -n GenerateRego --stack-name ${STACK_NAME} --tail
-```
-
-**Run tests:**
-```bash
-pip install -r tests/requirements.txt --user
-python -m pytest tests/unit -v
 ```
 
 ## Cleanup
