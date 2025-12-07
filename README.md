@@ -6,7 +6,7 @@
 - Demo 3: https://drive.google.com/file/d/1i2ixh5NtVLBPdyAURwqlz1MEpwqTl0hF/view?usp=sharing
 - Demo 4: https://drive.google.com/file/d/1UcPAdQlo7Vls6lWg4QGrD5iG5covGmo1/view?usp=sharing
 - Demo 5: https://drive.google.com/file/d/1HAM6G4cx6-wgGPxNykp6iD6AFSd5dq0E/view?usp=sharing
-- 
+- Demo 6 (Final Presentation): https://drive.google.com/file/d/1Uvv7_NqEQM97igEbppUGl0QFR5vS6Rzc/view?usp=sharing
 
 **Instructions** 
 ======================================
@@ -38,7 +38,7 @@ As the compliance team, I want notifications when synchronization between cloud 
 **Scope and Features of the Project:**
 ======================================
 - In Scope:
-AWS Guardrail Discovery. Retrieve governance rules from an AWS account (e.g., Service Control Policies, IAM Policies, Config Rules).
+AWS Guardrail Discovery. Retrieve governance rules from an AWS account (Service Control Policies).
 Policy Translation. Automatically translate these cloud rules into equivalent OPA/Rego policies.
 Pipeline Integration. Integrate the generated OPA policies into Infrastructure-as-Code pipelines for early compliance checks.
 Basic Synchronization. Regenerate and update OPA policies when cloud rules change.
@@ -56,11 +56,11 @@ Overall we have 5 main components in this project. The guardrail discovery modul
 
 **Acceptance Criteria:**
 ======================================
-At the end of the project, the Policy Synthesizer engine should be able to successfully discover governance guardrails from a target cloud account (such as AWS SCPs, IAM policies, and Config Rules) and automatically generate equivalent OPA/Rego policies. These synthesized policies must be publishable into an IaC pipeline (e.g., Terraform or CloudFormation) so developers can validate their configurations before deployment. The tool should also support local or offline runs using pre-generated policy packs, enabling developer testing without direct cloud connectivity. Additionally, the system should demonstrate continuous synchronization capabilities so that changes to cloud guardrails are reflected in the generated OPA policies.
+At the end of the project, the Policy Synthesizer engine should be able to successfully discover governance guardrails from a target cloud account (AWS SCPs) and automatically generate equivalent OPA/Rego policies. These synthesized policies must be publishable into an IaC pipeline (e.g., Terraform or CloudFormation) so developers can validate their configurations before deployment. The tool should also support local or offline runs using pre-generated policy packs, enabling developer testing without direct cloud connectivity. Additionally, the system should demonstrate continuous synchronization capabilities so that changes to cloud guardrails are reflected in the generated OPA policies.
 
 **Stretch Goals**
 ======================================
-If time and resources allow, the team will extend the synthesizer to support multi-cloud environments by incorporating Azure Policy and GCP Org Policy translation. Other enhancements may include drift detection to identify mismatches between live cloud policies and synthesized OPA rules, as well as visualization features to provide insight into effective guardrails. Finally, the project may deliver CI/CD pipeline integrations (e.g., GitHub Actions or GitLab CI) that enable policy enforcement during pull request reviews, further embedding compliance into the development workflow.
+If time and resources allow, the team will extend the synthesizer to support IAM and Configs as well. Other enhancements may include drift detection to identify mismatches between live cloud policies and synthesized OPA rules, as well as visualization features to provide insight into effective guardrails. Finally, the project may deliver CI/CD pipeline integrations (e.g., GitHub Actions or GitLab CI) that enable policy enforcement during pull request reviews, further embedding compliance into the development workflow.
 Pre-packaged policies for offline runs
 Github pipeline check
 
