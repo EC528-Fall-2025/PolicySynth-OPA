@@ -1,0 +1,458 @@
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  SCPBucketName:
+    Type: String
+    Description: S3 bucket name for storing SCP policies
+    Default: policysynth-scp-bucket
+  TerraformPlanBucketName:
+    Type: String
+    Description: S3 bucket name for Terraform plan files
+    Default: policysynth-terraform-bucket
+
+Resources:
+  # IAM Roles (no dependencies)
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${SCPBucketName}-${AWS::AccountId}/*"
+                  - !Sub "arn:aws:s3:::${SCPBucketName}-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${TerraformPlanBucketName}-${AWS::AccountId}/*"
+                  - !Sub "arn:aws:s3:::${TerraformPlanBucketName}-${AWS::AccountId}"
+        - PolicyName: BedrockAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "*"
+
+  # S3 Buckets (no dependencies)
+  SCPBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${SCPBucketName}-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  TerraformPlanBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${TerraformPlanBucketName}-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # SNS Topic (no dependencies)
+  TerraformViolationEmailTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: SendTerraformViolationEmail-PolicySynth
+
+  # Lambda Layer (no dependencies)
+  OPALayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: opa-binary-layer
+      Description: Lambda layer containing OPA binary for Rego policy validation
+      ContentUri: layers/opa/
+      CompatibleRuntimes:
+        - python3.13
+        - python3.12
+        - python3.11
+        - python3.10
+        - python3.9
+
+  # Lambda Functions (depend on: LambdaExecutionRole, S3 Buckets, OPALayer)
+  DeleteSCPPolicyFromS3:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: DeleteSCPPolicyFromS3
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      CodeUri: functions/lambda_delete_scp/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          SCP_BUCKET: !Ref SCPBucket
+      
+  StoreSCPPolicyInS3:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: StoreSCPPolicyInS3
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      CodeUri: functions/lambda_store_policy/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          SCP_BUCKET: !Ref SCPBucket
+
+  GenerateRego:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: GenerateRego
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      CodeUri: functions/lambda_generate/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5 minutes (max for Lambda)
+      MemorySize: 512  # Optional: increase if needed
+
+  ValidateSyntaxPolicy:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ValidateSyntaxPolicy
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      CodeUri: functions/lambda_validate_syntax/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - !Ref OPALayer
+
+  ValidateSemanticPolicy:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ValidateSemanticPolicy
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      CodeUri: functions/lambda_validate_semantic/
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300  # 5 minutes (also uses Bedrock)
+      MemorySize: 1024  # More memory for OPA + Bedrock
+      Environment:
+        Variables:
+          TERRAFORM_PLAN_BUCKET: !Ref TerraformPlanBucket
+          TERRAFORM_PLAN_KEY: plan.json
+          TERRAFORM_PLAN_QUERY: data.scp
+          ENABLE_TERRAFORM_EVAL: "true"
+      Layers:
+        - !Ref OPALayer
+
+  # State Machine Role (depends on: TerraformViolationEmailTopic)
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+        - arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess
+      Policies:
+        - PolicyName: SNSPublish
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref TerraformViolationEmailTopic
+  # State Machines (depend on: StateMachineRole, Lambda Functions, TerraformViolationEmailTopic)
+  SNSStateMachine: 
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Definition: 
+        {
+          "Comment": "SNS testing",
+          "StartAt": "Choice",
+          "States": {
+            "Choice": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.sendEmail",
+                  "StringEquals": "true",
+                  "Next": "PublishToSNS"
+                }
+              ],
+              "Default": "EndState"
+            },
+            "PublishToSNS": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::sns:publish",
+              "Parameters": {
+                "TopicArn": "${SNSStateMachineTopicArn}",
+                "Message": "Current Terraform violates SCP Policy ID: 123. Errors: this is just a test",
+                "Subject": "Terraform SCP non-compliance detected"
+              },
+              "End": true
+            },
+            "EndState": {
+              "Type": "Pass",
+              "Result": "No email sent",
+              "End": true
+            }
+          }
+        }
+      DefinitionSubstitutions:
+        SNSStateMachineTopicArn: !Ref TerraformViolationEmailTopic
+      Role: !GetAtt StateMachineRole.Arn
+      Name: SNSStateMachine
+  StateMachine1bcdcf1e:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Definition:
+        Comment: SCP Event Processing State Machine
+        StartAt: Check Event Type
+        States:
+          Check Event Type:
+            Type: Choice
+            Choices:
+              - Variable: $.eventName
+                StringEquals: DeletePolicy
+                Next: Delete Policy from S3
+              - Variable: $.eventName
+                StringEquals: CreatePolicy
+                Next: Create Transform
+              - Variable: $.eventName
+                StringEquals: UpdatePolicy
+                Next: Create Transform
+          Create Transform:
+            Type: Pass
+            Parameters:
+              eventName.$: $.eventName
+              policyId.$: $.policyId
+              policyName.$: $.policyName
+              timestamp.$: $.timestamp
+              policyContent.$: $.policyContent
+              scp.$: States.StringToJson($.policyContent)
+              previous_rego: ''
+              errors: ''
+              input_data: ''
+              query: data.scp
+              counter.$: $.counter
+            Next: Generate Rego
+          Delete Policy from S3:
+            Type: Task
+            Resource: ${InvokeFunction_Resource_9f35a4f8}
+            End: true
+          Generate Rego:
+            Type: Task
+            ResultSelector:
+              generated_rego.$: $.generated_rego
+              errors.$: $.errors
+            ResultPath: $.generateResult
+            Resource: ${InvokeFunction_Resource_446f908c}
+            Next: Validate Syntax Policy
+          Validate Syntax Policy:
+            Type: Task
+            ResultSelector:
+              generated_rego.$: $.generated_rego
+              errors.$: $.errors
+            ResultPath: $.syntaxResult
+            Resource: ${InvokeFunction_Resource_e94760f6}
+            Next: Check Syntax Validation Result
+          Check Syntax Validation Result:
+            Type: Choice
+            Choices:
+              - Variable: $.syntaxResult.errors
+                StringEquals: ''
+                Next: Validate Semantic Policy
+            Default: Check Retry Limit Syntax
+          Validate Semantic Policy:
+            Type: Task
+            ResultSelector:
+              stopReason.$: $.stopReason
+              usage.$: $.usage
+              errors.$: $.errors
+              terraform_non_compliant.$: $.terraform_non_compliant
+              terraform_non_compliance_details.$: $.terraform_non_compliance_details
+            Resource: ${InvokeFunction_Resource_24bef36f}
+            ResultPath: $.validationResult
+            Next: Check Validation Result
+          Check Validation Result:
+            Type: Choice
+            Choices:
+              - Variable: $.validationResult.errors
+                StringEquals: ''
+                Next: Store Policy in S3
+            Default: Check Retry Limit Validation
+          Notify Noncompliance:
+            Type: Task
+            Resource: arn:aws:states:::sns:publish
+            Parameters:
+              TopicArn: ${snspublish_TopicArn_c550e513}
+              Message.$: >-
+                States.Format('Current Terraform violates SCP Policy ID:{}.
+                Errors: {}.
+                Non Compliance Details: {}.', $.policyId, $.validationResult.errors, $.validationResult.terraform_non_compliance_details)
+              Subject: Terraform SCP non-compliance detected
+            Next: Generation Failed
+          Check Retry Limit Validation:
+            Type: Choice
+            Choices:
+              - Next: Notify Noncompliance
+                Variable: $.validationResult.errors
+                StringMatches: '*Terraform eval error*'
+              - Next: Generation Failed
+                Variable: $.counter
+                NumericGreaterThanEquals: 10
+            Default: Retry Semantic Transform
+          Check Retry Limit Syntax:
+            Type: Choice
+            Choices:
+              - Variable: $.counter
+                NumericGreaterThanEquals: 5
+                Next: Generation Failed
+            Default: Retry Syntax Transform
+          Retry Syntax Transform:
+            Type: Pass
+            Parameters:
+              policyId.$: $.policyId
+              eventName.$: $.eventName
+              policyContent.$: $.policyContent
+              scp.$: $.scp
+              previous_rego.$: $.generateResult.generated_rego
+              errors.$: $.syntaxResult.errors
+              counter.$: States.MathAdd($.counter, 1)
+            Next: Generate Rego
+          Retry Semantic Transform:
+            Type: Pass
+            Parameters:
+              policyId.$: $.policyId
+              eventName.$: $.eventName
+              policyContent.$: $.policyContent
+              scp.$: $.scp
+              previous_rego.$: $.generateResult.generated_rego
+              errors.$: $.validationResult.errors
+              counter.$: States.MathAdd($.counter, 1)
+            Next: Generate Rego
+          Generation Failed:
+            Type: Fail
+            Cause: Policy generation failed after 5 attempts
+            Error: GenerationFailure
+          Store Policy in S3:
+            Type: Task
+            Resource: ${InvokeFunction_Resource_eea93b0a}
+            ResultPath: $.storeResult
+            End: true
+      DefinitionSubstitutions:
+        InvokeFunction_Resource_9f35a4f8: !GetAtt DeleteSCPPolicyFromS3.Arn
+        InvokeFunction_Resource_446f908c: !GetAtt GenerateRego.Arn
+        InvokeFunction_Resource_e94760f6: !GetAtt ValidateSyntaxPolicy.Arn
+        InvokeFunction_Resource_24bef36f: !GetAtt ValidateSemanticPolicy.Arn
+        InvokeFunction_Resource_eea93b0a: !GetAtt StoreSCPPolicyInS3.Arn
+        snspublish_TopicArn_c550e513: !Ref TerraformViolationEmailTopic
+      Name: !Sub "${AWS::StackName}-SCPProcessingStateMachine"
+      Type: STANDARD
+      Role: !GetAtt StateMachineRole.Arn
+      Logging:
+        Level: 'OFF'
+        IncludeExecutionData: false
+
+  # EventBridge Role (depends on: StateMachine1bcdcf1e)
+  EventBridgeInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeStateMachine
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - states:StartExecution
+                Resource: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:${AWS::StackName}-SCPProcessingStateMachine"
+
+  # EventBridge Rules (depend on: StateMachine1bcdcf1e, EventBridgeInvokeRole)
+  SCPCreateUpdateRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${AWS::StackName}-SCPCreateUpdateRule"
+      Description: Trigger when SCP policies are created or updated
+      EventPattern:
+        source:
+          - aws.organizations
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventName:
+            - CreatePolicy
+            - UpdatePolicy
+      State: ENABLED
+      EventBusName: default
+      Targets:
+        - Id: SCPCreateUpdateTarget
+          Arn: !GetAtt StateMachine1bcdcf1e.Arn
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              eventName: $.detail.eventName
+              ingestionTime: $.time
+              policyContent: $.detail.requestParameters.content
+              policyId: $.detail.requestParameters.policyId
+              policyName: $.detail.requestParameters.name
+            InputTemplate: '{"eventName": "<eventName>", "policyContent": "<policyContent>", "policyId": "<policyId>", "policyName": "<policyName>", "timestamp": "<ingestionTime>", "counter": 0}'
+
+  SCPDeleteRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${AWS::StackName}-SCPDeleteRule"
+      Description: Trigger when SCP policies are deleted
+      EventPattern:
+        source:
+          - aws.organizations
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventName:
+            - DeletePolicy
+      State: ENABLED
+      EventBusName: default
+      Targets:
+        - Id: SCPDeleteTarget
+          Arn: !GetAtt StateMachine1bcdcf1e.Arn
+          RoleArn: !GetAtt EventBridgeInvokeRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              eventName: $.detail.eventName
+              ingestionTime: $.time
+              policyContent: $.detail.requestParameters.content
+              policyId: $.detail.requestParameters.policyId
+              policyName: $.detail.requestParameters.name
+            InputTemplate: '{"eventName": "<eventName>", "policyContent": "<policyContent>", "policyId": "<policyId>", "policyName": "<policyName>", "timestamp": "<ingestionTime>", "counter": 0}'
+

@@ -1,0 +1,175 @@
+{
+    "Comment": "SCP Event Processing State Machine",
+    "StartAt": "Check Event Type",
+    "States": {
+        "Check Event Type": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.eventName",
+                    "StringEquals": "DeletePolicy",
+                    "Next": "Delete Policy from S3"
+                },
+                {
+                    "Variable": "$.eventName",
+                    "StringEquals": "CreatePolicy",
+                    "Next": "Create Transform"
+                },
+                {
+                    "Variable": "$.eventName",
+                    "StringEquals": "UpdatePolicy",
+                    "Next": "Create Transform"
+                }
+            ]
+        },
+        "Create Transform": {
+            "Type": "Pass",
+            "Parameters": {
+                "eventName.$": "$.eventName",
+                "policyId.$": "$.policyId",
+                "policyName.$": "$.policyName",
+                "timestamp.$": "$.timestamp",
+                "policyContent.$": "$.policyContent",
+                "scp.$": "States.StringToJson($.policyContent)",
+                "previous_rego": "",
+                "errors": "",
+                "input_data": "",
+                "query": "data.scp",
+                "counter.$": "$.counter"
+            },
+            "Next": "Generate Rego"
+        },
+        "Delete Policy from S3": {
+            "Type": "Task",
+            "Resource": "${InvokeFunction_Resource_bf2c6a51}",
+            "End": true
+        },
+        "Generate Rego": {
+            "Type": "Task",
+            "ResultSelector": {
+                "generated_rego.$": "$.generated_rego",
+                "errors.$": "$.errors"
+            },
+            "ResultPath": "$.generateResult",
+            "Resource": "${InvokeFunction_Resource_2bca3b33}",
+            "Next": "Validate Syntax Policy"
+        },
+        "Validate Syntax Policy": {
+            "Type": "Task",
+            "ResultSelector": {
+                "generated_rego.$": "$.generated_rego",
+                "errors.$": "$.errors"
+            },
+            "ResultPath": "$.syntaxResult",
+            "Resource": "${InvokeFunction_Resource_28502c2c}",
+            "Next": "Check Syntax Validation Result"
+        },
+        "Check Syntax Validation Result": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.syntaxResult.errors",
+                    "StringEquals": "",
+                    "Next": "Validate Semantic Policy"
+                }
+            ],
+            "Default": "Check Retry Limit Syntax"
+        },
+        "Validate Semantic Policy": {
+            "Type": "Task",
+            "ResultSelector": {
+                "stopReason.$": "$.stopReason",
+                "usage.$": "$.usage",
+                "errors.$": "$.errors"
+            },
+            "Resource": "${InvokeFunction_Resource_da90dfab}",
+            "ResultPath": "$.validationResult",
+            "Next": "Check Validation Result"
+        },
+        "Check Validation Result": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.validationResult.errors",
+                    "StringEquals": "",
+                    "Next": "Store Policy in S3"
+                },
+                {
+                    "Variable": "$.validationResult.terraform_non_compliant",
+                    "StringEquals": "true",
+                    "Next": "Notify Noncompliance"
+                }
+            ],
+            "Default": "Check Retry Limit Validation"
+        },
+        "Notify Noncompliance": {
+            "Type": "Task",
+            "Resource": "${snspublish_TopicArn_c550e513}",
+            "Parameters": {
+                "TopicArn": "${snspublish_TopicArn_c550e513}",
+                "Message.$": "States.Format('Current Terraform violates SCP Policy ID:{}. Errors: {}', $.policyId, $.validationResult.errors)",
+                "Subject": "Terraform SCP non-compliance detected"
+            },
+            "Next": "Generation Failed"
+        },
+        "Check Retry Limit Validation": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Next": "Generation Failed",
+                    "Variable": "$.counter",
+                    "NumericGreaterThanEquals": 10
+                }
+            ],
+            "Default": "Retry Semantic Transform"
+        },
+        "Check Retry Limit Syntax": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.counter",
+                    "NumericGreaterThanEquals": 5,
+                    "Next": "Generation Failed"
+                }
+            ],
+            "Default": "Retry Syntax Transform"
+        },
+        "Retry Syntax Transform": {
+            "Type": "Pass",
+            "Parameters": {
+                "policyId.$": "$.policyId",
+                "eventName.$": "$.eventName",
+                "policyContent.$": "$.policyContent",
+                "scp.$": "$.scp",
+                "previous_rego.$": "$.generateResult.generated_rego",
+                "errors.$": "$.syntaxResult.errors",
+                "counter.$": "States.MathAdd($.counter, 1)"
+            },
+            "Next": "Generate Rego"
+        },
+        "Retry Semantic Transform": {
+            "Type": "Pass",
+            "Parameters": {
+                "policyId.$": "$.policyId",
+                "eventName.$": "$.eventName",
+                "policyContent.$": "$.policyContent",
+                "scp.$": "$.scp",
+                "previous_rego.$": "$.generateResult.generated_rego",
+                "errors.$": "$.validationResult.errors",
+                "counter.$": "States.MathAdd($.counter, 1)"
+            },
+            "Next": "Generate Rego"
+        },
+        "Generation Failed": {
+            "Type": "Fail",
+            "Cause": "Policy generation failed after 5 attempts",
+            "Error": "GenerationFailure"
+        },
+        "Store Policy in S3": {
+            "Type": "Task",
+            "Resource": "${InvokeFunction_Resource_d04a23b7}",
+            "ResultPath": "$.storeResult",
+            "End": true
+        }
+    }
+}
