@@ -360,9 +360,11 @@ def run_terraform_test_suite(rego_code: str):
             if not ok:
                 return False, err, False
             if violations:
-                msg = (
+                header = (
                     f"Fallback Terraform eval reported {len(violations)} violation(s)"
                 )
+                body = "\n".join(f"- {v}" for v in violations[:10])
+                msg = header + "\nViolations:\n" + body
                 return False, msg[:2000], True
             return True, "", False
         except Exception as e:
@@ -385,9 +387,10 @@ def run_terraform_test_suite(rego_code: str):
         elif violations:
             all_ok = False
             terraform_non_compliant = True
-            problems.append(
-                f"{key}: expected NO violations, but got {len(violations)}"
-            )
+
+            header = f"{key}: expected NO violations, but got {len(violations)}"
+            body = "\n".join(f"- {v}" for v in violations[:10])
+            problems.append(header + "\nViolations:\n" + body)
 
     # Check FAIL plans: expect AT LEAST ONE violation
     for key in fail_keys:
@@ -409,10 +412,12 @@ def run_terraform_test_suite(rego_code: str):
         logger.info("All Terraform semantic tests passed.")
         return True, "", False
     else:
-        msg = " ; ".join(problems)
+        # Join each plan’s block with a blank line between
+        msg = "\n\n".join(problems)
         logger.error("Terraform semantic tests failed: %s", msg)
         # Truncate in case it gets huge
         return False, msg[:2000], terraform_non_compliant
+
 
 def lambda_handler(event,context): 
     try: 
@@ -557,6 +562,8 @@ def lambda_handler(event,context):
         logger.debug("Stack trace: %s", tb)
         return {
             "statusCode": 500,
+            "stopReason": response.get("stopReason"),
+            "usage": response.get("usage", {}),
             "error": str(e),
             "stack_trace": tb
         }

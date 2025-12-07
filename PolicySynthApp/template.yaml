@@ -139,6 +139,8 @@ Resources:
       Runtime: python3.13
       CodeUri: functions/lambda_validate_syntax/
       Role: !GetAtt LambdaExecutionRole.Arn
+      Layers:
+        - !Ref OPALayer
 
   ValidateSemanticPolicy:
     Type: AWS::Serverless::Function
@@ -301,9 +303,6 @@ Resources:
               - Variable: $.validationResult.errors
                 StringEquals: ''
                 Next: Store Policy in S3
-              - Variable: $.validationResult.terraform_non_compliant
-                StringEquals: 'true'
-                Next: Notify Noncompliance
             Default: Check Retry Limit Validation
           Notify Noncompliance:
             Type: Task
@@ -312,12 +311,16 @@ Resources:
               TopicArn: ${snspublish_TopicArn_c550e513}
               Message.$: >-
                 States.Format('Current Terraform violates SCP Policy ID:{}.
-                Errors: {}', $.policyId, $.validationResult.errors)
+                Errors: {}.
+                Non Compliance Details: {}.', $.policyId, $.validationResult.errors, $.validationResult.terraform_non_compliance_details)
               Subject: Terraform SCP non-compliance detected
             Next: Generation Failed
           Check Retry Limit Validation:
             Type: Choice
             Choices:
+              - Next: Notify Noncompliance
+                Variable: $.validationResult.errors
+                StringMatches: '*Terraform eval error*'
               - Next: Generation Failed
                 Variable: $.counter
                 NumericGreaterThanEquals: 10
