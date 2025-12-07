@@ -108,7 +108,7 @@ def lambda_handler(event,context):
 
 def run_opa_check(rego_code: str):
     # run opa check for syntax validation
-    opa_path = "/opt/bin/opa"
+    opa_path = "/opt/opt/bin/opa"
     logger.debug("Checking OPA binary at path: %s", opa_path)
     if not os.path.exists(opa_path):
         logger.error("OPA binary not found at %s", opa_path)
@@ -150,12 +150,12 @@ def run_opa_eval(rego_code, input_data, query):
     # failing returns: bool passed=False, error message string
     temp_policy = None
     temp_input = None
-    opa_path = "/opt/bin/opa"
+    opa_path = "/opt/opt/bin/opa"
 
     logger.debug("Preparing to run opa eval using binary: %s", opa_path)
-    if not opa_path:
-        logger.error("OPA_PATH environment variable not set or opa path empty")
-        return False, "OPA_PATH environment variable not set"
+    if not os.path.exists(opa_path):
+        logger.error("OPA binary not found at %s", opa_path)
+        return False, f"OPA binary not found at {opa_path}"
 
     try:
         # run opa eval with input data after syntax passed
